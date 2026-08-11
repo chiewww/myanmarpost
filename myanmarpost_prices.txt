@@ -1,9 +1,229 @@
 Myanmar Post International Ordinary Letter Prices
 Maximum weight: 20 g
 
-Generated: 2026-08-11 06:18:03 UTC
+Generated: 2026-08-11 06:21:39 UTC
 
 Australia
 Country code: AU
 Ordinary letter (20 g or less): 11,000 Kyats
 Delivery duration: between 3 and 10 days
+
+Austria
+Country code: AT
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: delivery duration unavailable
+
+Bangladesh
+Country code: BD
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 6 and 12 days
+
+Brunei Darussalam
+Country code: BN
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 5 days
+
+Cambodia
+Country code: KH
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 6 days
+
+Canada
+Country code: CA
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 8 days
+
+Czech Republic
+Country code: CZ
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 4 and 6 days
+
+Denmark
+Country code: DK
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 8 days
+
+Egypt
+Country code: EG
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: delivery duration unavailable
+
+Ethiopia
+Country code: ET
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: delivery duration unavailable
+
+Finland
+Country code: FI
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 2 and 15 days
+
+France
+Country code: FR
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 10 days
+
+Germany
+Country code: DE
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 4 and 10 days
+
+Greece
+Country code: GR
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 5 days
+
+Hong Kong
+Country code: HK
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 9 days
+
+India
+Country code: IN
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 4 and 12 days
+
+Indonesia
+Country code: ID
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 5 and 9 days
+
+Italy
+Country code: IT
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 5 and 8 days
+
+Japan
+Country code: JP
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 7 days
+
+Jordan
+Country code: JO
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: delivery duration unavailable
+
+Laos
+Country code: LA
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 4 and 5 days
+
+Malaysia
+Country code: MY
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 6 days
+
+Netherlands
+Country code: NL
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 5 and 8 days
+
+New Zealand
+Country code: NZ
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 4 and 8 days
+
+Norway
+Country code: NO
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 7 and 11 days
+
+Oman
+Country code: OM
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 5 and 6 days
+
+Pakistan
+Country code: PK
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 8 and 10 days
+
+Philippines
+Country code: PH
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 6 and 12 days
+
+Poland
+Country code: PL
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 7 and 10 days
+
+Portugal
+Country code: PT
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 10 days
+
+Romania
+Country code: RO
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: delivery duration unavailable
+
+Russian Federation
+Country code: RU
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 6 and 11 days
+
+Singapore
+Country code: SG
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 2 and 2 days
+
+South Africa
+Country code: ZA
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: delivery duration unavailable
+
+South Korea
+Country code: KR
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 2 and 6 days
+
+Spain
+Country code: ES
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 6 and 12 days
+
+Sri Lanka
+Country code: LK
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 4 and 7 days
+
+Sweden
+Country code: SE
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 6 and 12 days
+
+Switzerland
+Country code: CH
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 7 days
+
+Taiwan, Province of China
+Country code: TW
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 4 and 7 days
+
+Thailand
+Country code: TH
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 2 and 5 days
+
+Turkey
+Country code: TR
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 2 and 13 days
+
+United Kingdom
+Country code: GB
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 6 days
+
+Viet Nam
+Country code: VN
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 2 and 13 days
+
+🇨🇳 China
+Country code: CN-BJ
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 9 days
