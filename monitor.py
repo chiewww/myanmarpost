@@ -6,22 +6,14 @@ from datetime import datetime, timezone
 
 BASE_URL = "https://myanmarpost.com.mm"
 
-PRICING_URL = (
-    f"{BASE_URL}/pricing?tab=international"
-)
+PRICING_URL = f"{BASE_URL}/pricing?tab=international"
 
-# Ordinary letters only.
-#
-# 0.02 kg = 20 grams.
-MAX_WEIGHT_KG = 0.02
+# Ordinary letter maximum weight.
+# 20 grams = 0.02 kg
+MAX_LETTER_WEIGHT_KG = 0.02
 
 
 def get_response(url, headers):
-    """
-    Send an HTTP request and return:
-        status, content_type, body
-    """
-
     request = urllib.request.Request(
         url,
         headers=headers
@@ -64,10 +56,16 @@ def get_response(url, headers):
         raise
 
 
+# ---------------------------------------------------------
+# PRICING
+# ---------------------------------------------------------
+
 def get_pricing_data():
     """
-    Download international pricing data
-    from Myanmar Post.
+    Download international pricing data.
+
+    The website uses the international pricing page:
+        /pricing?tab=international
     """
 
     headers = {
@@ -85,8 +83,7 @@ def get_pricing_data():
 
         "X-Inertia": "true",
 
-        "X-Requested-With":
-            "XMLHttpRequest",
+        "X-Requested-With": "XMLHttpRequest",
 
         "X-Inertia-Version":
             "34e9d596c2ba005758a128ed0067da87",
@@ -158,16 +155,21 @@ def get_pricing_data():
         ) from e
 
 
+# ---------------------------------------------------------
+# DELIVERY DURATION
+# ---------------------------------------------------------
+
 def get_duration(country_code):
     """
-    Get delivery-duration information
-    for a country.
+    Get delivery duration information.
 
-    IMPORTANT:
-    The fp section is ordinary letter.
-    The ems section is EMS.
+    Example:
+        /deliver-duration/AU
 
-    We only use fp.
+    The response contains separate services:
+
+        data.fp
+        data.ems
     """
 
     url = (
@@ -200,16 +202,16 @@ def get_duration(country_code):
         headers
     )
 
-    text = body.decode(
-        "utf-8",
-        errors="replace"
-    )
-
     print(
         f"Duration {country_code}: "
         f"HTTP {status}, "
         f"{content_type}, "
         f"{len(body)} bytes"
+    )
+
+    text = body.decode(
+        "utf-8",
+        errors="replace"
     )
 
     try:
@@ -219,8 +221,8 @@ def get_duration(country_code):
     except json.JSONDecodeError as e:
 
         print(
-            f"Invalid duration JSON for "
-            f"{country_code}:"
+            f"Invalid duration JSON "
+            f"for {country_code}:"
         )
 
         print(text[:500])
@@ -231,115 +233,23 @@ def get_duration(country_code):
         ) from e
 
 
-def get_fp_duration(country_code):
-    """
-    Return the ordinary-letter delivery duration.
-
-    IMPORTANT:
-        fp = ordinary letter
-        ems = EMS
-
-    We NEVER use ems here.
-
-    A valid ordinary-letter service must have
-    a non-empty fp.days_en value.
-
-    Examples of valid values:
-
-        "between 3 and 10 days"
-        "between 21 and 30 days"
-        "between 30 and 45 days"
-
-    Examples of unavailable values:
-
-        null
-        ""
-        "-"
-    """
-
-    try:
-
-        duration_data = get_duration(
-            country_code
-        )
-
-    except Exception as e:
-
-        print(
-            f"Could not retrieve duration "
-            f"for {country_code}: {e}"
-        )
-
-        return None
-
-    data = duration_data.get(
-        "data",
-        {}
-    )
-
-    if not isinstance(
-        data,
-        dict
-    ):
-        return None
-
-    # ------------------------------------------------
-    # IMPORTANT:
-    # Use ONLY fp.
-    #
-    # Do NOT fall back to ems.
-    # ------------------------------------------------
-
-    fp = data.get(
-        "fp",
-        {}
-    )
-
-    if not isinstance(
-        fp,
-        dict
-    ):
-        return None
-
-    duration = fp.get(
-        "days_en"
-    )
-
-    # null
-    if duration is None:
-        return None
-
-    duration = str(
-        duration
-    ).strip()
-
-    # Empty string
-    if duration == "":
-        return None
-
-    # Explicit unavailable marker
-    if duration == "-":
-        return None
-
-    return duration
-
+# ---------------------------------------------------------
+# FIND COUNTRY LIST
+# ---------------------------------------------------------
 
 def find_country_list(obj):
     """
-    Recursively search the pricing JSON
-    for the list containing country records.
+    Recursively find the list containing
+    country records.
+
+    Country records contain:
+        alpha_2_code
     """
 
-    if isinstance(
-        obj,
-        list
-    ):
+    if isinstance(obj, list):
 
         if obj and all(
-            isinstance(
-                item,
-                dict
-            )
+            isinstance(item, dict)
             for item in obj
         ):
 
@@ -352,23 +262,16 @@ def find_country_list(obj):
 
         for item in obj:
 
-            result = find_country_list(
-                item
-            )
+            result = find_country_list(item)
 
             if result:
                 return result
 
-    elif isinstance(
-        obj,
-        dict
-    ):
+    elif isinstance(obj, dict):
 
         for value in obj.values():
 
-            result = find_country_list(
-                value
-            )
+            result = find_country_list(value)
 
             if result:
                 return result
@@ -376,18 +279,21 @@ def find_country_list(obj):
     return []
 
 
-def find_20g_price(letter_rates):
+# ---------------------------------------------------------
+# ORDINARY LETTER PRICE
+# ---------------------------------------------------------
+
+def find_20g_letter_price(letter_rates):
     """
     Find the ordinary-letter price for
     20 g or less.
 
-    Myanmar Post uses kilograms.
+    Myanmar Post represents weight in kg.
 
         20 g = 0.02 kg
 
     If several rates are <= 20 g,
-    use the highest available weight
-    not exceeding 20 g.
+    use the highest available bracket.
     """
 
     if not isinstance(
@@ -421,21 +327,18 @@ def find_20g_price(letter_rates):
             ValueError,
             TypeError
         ):
+
             continue
 
-        if weight <= MAX_WEIGHT_KG:
+        if weight <= MAX_LETTER_WEIGHT_KG:
 
             eligible.append(
-                (
-                    weight,
-                    amount
-                )
+                (weight, amount)
             )
 
     if not eligible:
         return None
 
-    # Highest available weight <= 20 g.
     eligible.sort(
         key=lambda x: x[0]
     )
@@ -443,14 +346,96 @@ def find_20g_price(letter_rates):
     return eligible[-1][1]
 
 
-def find_country_pricing(country):
+# ---------------------------------------------------------
+# EMS PRICE
+# ---------------------------------------------------------
+
+def find_ems_price(ems_rates):
     """
-    Get ordinary-letter pricing.
+    Find the EMS price for an item weighing
+    20 g or less.
 
-    ONLY:
-        fp -> letter
+    EMS pricing normally starts at a larger
+    weight bracket, for example 0.5 kg.
 
-    We never use EMS pricing.
+    Therefore, for a 20 g item, use the
+    smallest available EMS weight bracket.
+
+    Example:
+
+        0.5 kg -> 140,000 Kyats
+        1 kg   -> 160,000 Kyats
+
+    A 20 g EMS item falls into the first
+    available EMS bracket.
+    """
+
+    if not isinstance(
+        ems_rates,
+        list
+    ):
+        return None
+
+    eligible = []
+
+    for item in ems_rates:
+
+        if not isinstance(
+            item,
+            dict
+        ):
+            continue
+
+        try:
+
+            weight = float(
+                item["weight"]
+            )
+
+            amount = int(
+                item["amount"]
+            )
+
+        except (
+            KeyError,
+            ValueError,
+            TypeError
+        ):
+
+            continue
+
+        # EMS bracket must cover 20 g.
+        if weight >= MAX_LETTER_WEIGHT_KG:
+
+            eligible.append(
+                (weight, amount)
+            )
+
+    if not eligible:
+        return None
+
+    # Use the smallest EMS bracket that
+    # covers a 20 g item.
+    eligible.sort(
+        key=lambda x: x[0]
+    )
+
+    return eligible[0][1]
+
+
+# ---------------------------------------------------------
+# COUNTRY PRICING
+# ---------------------------------------------------------
+
+def find_country_letter_price(country):
+    """
+    Get the ordinary-letter price from:
+
+        country
+            -> fp
+                -> letter
+
+    EMS is deliberately NOT used here.
     """
 
     fp = country.get(
@@ -469,10 +454,145 @@ def find_country_pricing(country):
         []
     )
 
-    return find_20g_price(
+    return find_20g_letter_price(
         letter
     )
 
+
+def find_country_ems_price(country):
+    """
+    Get the EMS price from:
+
+        country
+            -> ems
+
+    This is completely separate from FP.
+    """
+
+    ems = country.get(
+        "ems",
+        []
+    )
+
+    return find_ems_price(
+        ems
+    )
+
+
+# ---------------------------------------------------------
+# SERVICE AVAILABILITY
+# ---------------------------------------------------------
+
+def get_service_information(
+    country_code
+):
+    """
+    Get FP and EMS availability separately.
+
+    A service is considered available only when
+    its days_en contains actual text.
+
+    Example available:
+
+        "between 3 and 10 days"
+
+    Example unavailable:
+
+        null
+
+    This prevents EMS information from being
+    incorrectly used as ordinary-letter
+    information.
+    """
+
+    duration_data = get_duration(
+        country_code
+    )
+
+    data = duration_data.get(
+        "data",
+        {}
+    )
+
+    if not isinstance(
+        data,
+        dict
+    ):
+        data = {}
+
+    fp = data.get(
+        "fp",
+        {}
+    )
+
+    ems = data.get(
+        "ems",
+        {}
+    )
+
+    if not isinstance(
+        fp,
+        dict
+    ):
+        fp = {}
+
+    if not isinstance(
+        ems,
+        dict
+    ):
+        ems = {}
+
+    fp_duration = fp.get(
+        "days_en"
+    )
+
+    ems_duration = ems.get(
+        "days_en"
+    )
+
+    # FP is available only when the API
+    # actually provides a duration.
+    fp_available = (
+        isinstance(
+            fp_duration,
+            str
+        )
+        and bool(
+            fp_duration.strip()
+        )
+    )
+
+    # EMS is available only when the API
+    # actually provides a duration.
+    ems_available = (
+        isinstance(
+            ems_duration,
+            str
+        )
+        and bool(
+            ems_duration.strip()
+        )
+    )
+
+    return {
+        "fp_available": fp_available,
+        "fp_duration": (
+            fp_duration
+            if fp_available
+            else None
+        ),
+        "ems_available": ems_available,
+        "ems_duration": (
+            ems_duration
+            if ems_available
+            else None
+        ),
+    }
+
+
+# ---------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------
 
 def main():
 
@@ -502,11 +622,11 @@ def main():
 
     output.append(
         "Myanmar Post International "
-        "Ordinary Letter Prices"
+        "Ordinary Letter / EMS Prices"
     )
 
     output.append(
-        "Maximum weight: 20 g"
+        "Ordinary letter maximum weight: 20 g"
     )
 
     output.append("")
@@ -522,7 +642,7 @@ def main():
 
     output.append("")
 
-    # Sort alphabetically.
+    # Sort countries alphabetically.
     countries_sorted = sorted(
         countries,
         key=lambda country: str(
@@ -531,15 +651,10 @@ def main():
                 ""
             )
         ).lower()
-        if isinstance(
-            country,
-            dict
-        )
-        else ""
     )
 
-    available_count = 0
-    unavailable_count = 0
+    fp_available_count = 0
+    ems_available_count = 0
 
     for country in countries_sorted:
 
@@ -569,103 +684,143 @@ def main():
             f"({country_code})..."
         )
 
-        # ------------------------------------------------
-        # STEP 1
-        #
-        # Check ordinary-letter duration FIRST.
-        # ------------------------------------------------
+        # -------------------------------------------------
+        # Get service availability first.
+        # -------------------------------------------------
 
-        duration = get_fp_duration(
-            country_code
-        )
+        try:
 
-        # ------------------------------------------------
-        # STEP 2
-        #
-        # If fp.days_en is missing/null/"-",
-        # ordinary-letter service is unavailable.
-        #
-        # IMPORTANT:
-        # We do NOT show the pricing data.
-        # We also do NOT use EMS duration.
-        # ------------------------------------------------
-
-        if duration is None:
-
-            output.append(
-                country_name
+            service = get_service_information(
+                country_code
             )
 
-            output.append(
-                f"Country code: "
-                f"{country_code}"
-            )
-
-            output.append(
-                "Ordinary letter "
-                "(20 g or less): "
-                "service unavailable"
-            )
-
-            output.append(
-                "Delivery duration: -"
-            )
-
-            output.append("")
-
-            unavailable_count += 1
+        except Exception as e:
 
             print(
-                f"  {country_name}: "
-                f"ordinary-letter service "
-                f"unavailable"
+                f"Could not get duration "
+                f"for {country_code}: {e}"
             )
 
-            continue
+            service = {
+                "fp_available": False,
+                "fp_duration": None,
+                "ems_available": False,
+                "ems_duration": None,
+            }
 
-        # ------------------------------------------------
-        # STEP 3
-        #
-        # Only now look at the price.
-        # ------------------------------------------------
+        fp_available = service[
+            "fp_available"
+        ]
 
-        price = find_country_pricing(
+        fp_duration = service[
+            "fp_duration"
+        ]
+
+        ems_available = service[
+            "ems_available"
+        ]
+
+        ems_duration = service[
+            "ems_duration"
+        ]
+
+        # -------------------------------------------------
+        # Get prices.
+        # -------------------------------------------------
+
+        fp_price = find_country_letter_price(
             country
         )
+
+        ems_price = find_country_ems_price(
+            country
+        )
+
+        # -------------------------------------------------
+        # Output country name.
+        # -------------------------------------------------
 
         output.append(
             country_name
         )
 
         output.append(
-            f"Country code: "
-            f"{country_code}"
+            f"Country code: {country_code}"
         )
 
-        if price is None:
+        # -------------------------------------------------
+        # ORDINARY LETTER
+        # -------------------------------------------------
+
+        if fp_available:
+
+            fp_available_count += 1
+
+            if fp_price is not None:
+
+                output.append(
+                    "Ordinary letter "
+                    "(20 g or less): "
+                    f"{fp_price:,} Kyats"
+                )
+
+            else:
+
+                output.append(
+                    "Ordinary letter "
+                    "(20 g or less): "
+                    "price unavailable"
+                )
 
             output.append(
-                "Ordinary letter "
-                "(20 g or less): "
-                "price unavailable"
+                "Delivery duration: "
+                f"{fp_duration}"
             )
 
         else:
 
+            # IMPORTANT:
+            # Do NOT show the FP price when
+            # the service is suspended.
+
             output.append(
                 "Ordinary letter "
                 "(20 g or less): "
-                f"{price:,} Kyats"
+                "service suspended"
             )
 
-            available_count += 1
+        # -------------------------------------------------
+        # EMS
+        # -------------------------------------------------
 
-        output.append(
-            "Delivery duration: "
-            f"{duration}"
-        )
+        if ems_available:
+
+            ems_available_count += 1
+
+            if ems_price is not None:
+
+                output.append(
+                    "EMS (20 g or less): "
+                    f"{ems_price:,} Kyats"
+                )
+
+            else:
+
+                output.append(
+                    "EMS (20 g or less): "
+                    "price unavailable"
+                )
+
+            output.append(
+                "EMS delivery duration: "
+                f"{ems_duration}"
+            )
 
         output.append("")
+
+    # -----------------------------------------------------
+    # WRITE FILE
+    # -----------------------------------------------------
 
     result = "\n".join(
         output
@@ -679,6 +834,10 @@ def main():
 
         file.write(result)
 
+    # -----------------------------------------------------
+    # DISPLAY RESULT
+    # -----------------------------------------------------
+
     print("")
     print(
         "========================================"
@@ -691,15 +850,17 @@ def main():
     )
 
     print(
-        "Countries with available "
-        "ordinary-letter service: "
-        f"{available_count}"
+        "Ordinary-letter services available: "
+        f"{fp_available_count}"
     )
 
     print(
-        "Countries with unavailable "
-        "ordinary-letter service: "
-        f"{unavailable_count}"
+        "EMS services available: "
+        f"{ems_available_count}"
+    )
+
+    print(
+        "Output file: myanmarpost_prices.txt"
     )
 
 
