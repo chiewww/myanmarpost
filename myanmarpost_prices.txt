@@ -1,7 +1,7 @@
 Myanmar Post International Ordinary Letter Prices
 Maximum weight: 20 g
 
-Generated: 2026-08-11 06:30:20 UTC
+Generated: 2026-08-11 06:41:56 UTC
 
 Australia
 Country code: AU
@@ -10,7 +10,7 @@ Delivery duration: between 3 and 10 days
 
 Austria
 Country code: AT
-Ordinary letter (20 g or less): service suspended
+Ordinary letter (20 g or less): service unavailable
 Delivery duration: -
 
 Bangladesh
@@ -45,12 +45,12 @@ Delivery duration: between 3 and 8 days
 
 Egypt
 Country code: EG
-Ordinary letter (20 g or less): service suspended
+Ordinary letter (20 g or less): service unavailable
 Delivery duration: -
 
 Ethiopia
 Country code: ET
-Ordinary letter (20 g or less): service suspended
+Ordinary letter (20 g or less): service unavailable
 Delivery duration: -
 
 Finland
@@ -100,7 +100,7 @@ Delivery duration: between 3 and 7 days
 
 Jordan
 Country code: JO
-Ordinary letter (20 g or less): service suspended
+Ordinary letter (20 g or less): service unavailable
 Delivery duration: -
 
 Laos
@@ -155,7 +155,7 @@ Delivery duration: between 3 and 10 days
 
 Romania
 Country code: RO
-Ordinary letter (20 g or less): service suspended
+Ordinary letter (20 g or less): service unavailable
 Delivery duration: -
 
 Russian Federation
@@ -170,7 +170,7 @@ Delivery duration: between 2 and 2 days
 
 South Africa
 Country code: ZA
-Ordinary letter (20 g or less): service suspended
+Ordinary letter (20 g or less): service unavailable
 Delivery duration: -
 
 South Korea
