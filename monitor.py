@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 
 BASE_URL = "https://myanmarpost.com.mm"
 
-PRICING_URL = f"{BASE_URL}/pricing?tab=international"
+PRICING_URL = (
+    f"{BASE_URL}/pricing?tab=international"
+)
 
 # Ordinary letters only.
 #
@@ -64,11 +66,8 @@ def get_response(url, headers):
 
 def get_pricing_data():
     """
-    Download the international pricing data
+    Download international pricing data
     from Myanmar Post.
-
-    This is the endpoint used by the pricing page:
-        /pricing?tab=international
     """
 
     headers = {
@@ -86,7 +85,8 @@ def get_pricing_data():
 
         "X-Inertia": "true",
 
-        "X-Requested-With": "XMLHttpRequest",
+        "X-Requested-With":
+            "XMLHttpRequest",
 
         "X-Inertia-Version":
             "34e9d596c2ba005758a128ed0067da87",
@@ -160,11 +160,14 @@ def get_pricing_data():
 
 def get_duration(country_code):
     """
-    Get the delivery-duration information
+    Get delivery-duration information
     for a country.
 
-    Example:
-        /deliver-duration/AU
+    IMPORTANT:
+    The fp section is ordinary letter.
+    The ems section is EMS.
+
+    We only use fp.
     """
 
     url = (
@@ -228,19 +231,115 @@ def get_duration(country_code):
         ) from e
 
 
+def get_fp_duration(country_code):
+    """
+    Return the ordinary-letter delivery duration.
+
+    IMPORTANT:
+        fp = ordinary letter
+        ems = EMS
+
+    We NEVER use ems here.
+
+    A valid ordinary-letter service must have
+    a non-empty fp.days_en value.
+
+    Examples of valid values:
+
+        "between 3 and 10 days"
+        "between 21 and 30 days"
+        "between 30 and 45 days"
+
+    Examples of unavailable values:
+
+        null
+        ""
+        "-"
+    """
+
+    try:
+
+        duration_data = get_duration(
+            country_code
+        )
+
+    except Exception as e:
+
+        print(
+            f"Could not retrieve duration "
+            f"for {country_code}: {e}"
+        )
+
+        return None
+
+    data = duration_data.get(
+        "data",
+        {}
+    )
+
+    if not isinstance(
+        data,
+        dict
+    ):
+        return None
+
+    # ------------------------------------------------
+    # IMPORTANT:
+    # Use ONLY fp.
+    #
+    # Do NOT fall back to ems.
+    # ------------------------------------------------
+
+    fp = data.get(
+        "fp",
+        {}
+    )
+
+    if not isinstance(
+        fp,
+        dict
+    ):
+        return None
+
+    duration = fp.get(
+        "days_en"
+    )
+
+    # null
+    if duration is None:
+        return None
+
+    duration = str(
+        duration
+    ).strip()
+
+    # Empty string
+    if duration == "":
+        return None
+
+    # Explicit unavailable marker
+    if duration == "-":
+        return None
+
+    return duration
+
+
 def find_country_list(obj):
     """
     Recursively search the pricing JSON
     for the list containing country records.
-
-    A country record contains:
-        alpha_2_code
     """
 
-    if isinstance(obj, list):
+    if isinstance(
+        obj,
+        list
+    ):
 
         if obj and all(
-            isinstance(item, dict)
+            isinstance(
+                item,
+                dict
+            )
             for item in obj
         ):
 
@@ -260,7 +359,10 @@ def find_country_list(obj):
             if result:
                 return result
 
-    elif isinstance(obj, dict):
+    elif isinstance(
+        obj,
+        dict
+    ):
 
         for value in obj.values():
 
@@ -333,8 +435,7 @@ def find_20g_price(letter_rates):
     if not eligible:
         return None
 
-    # Select the highest available
-    # rate that is still 20 g or less.
+    # Highest available weight <= 20 g.
     eligible.sort(
         key=lambda x: x[0]
     )
@@ -344,17 +445,12 @@ def find_20g_price(letter_rates):
 
 def find_country_pricing(country):
     """
-    Get the ordinary-letter price from:
+    Get ordinary-letter pricing.
 
-        country
-          -> fp
-              -> letter
+    ONLY:
+        fp -> letter
 
-    We deliberately DO NOT use:
-        EMS
-        parcel
-        package
-        other services
+    We never use EMS pricing.
     """
 
     fp = country.get(
@@ -376,98 +472,6 @@ def find_country_pricing(country):
     return find_20g_price(
         letter
     )
-
-
-def get_duration_text(country_code):
-    """
-    Get the ordinary-letter delivery duration.
-
-    We use ONLY:
-
-        data.fp.days_en
-
-    Examples of valid durations:
-
-        "between 3 and 10 days"
-        "between 21 and 30 days"
-        "between 30 and 45 days"
-
-    There is NO fixed limit on the number of days.
-
-    IMPORTANT:
-
-    If days_en is:
-        "-"
-        ""
-        null
-        missing
-
-    then the ordinary-letter service is treated
-    as SUSPENDED.
-
-    In that situation this function returns None,
-    and the price will NOT be displayed.
-    """
-
-    try:
-
-        duration_data = get_duration(
-            country_code
-        )
-
-        data = duration_data.get(
-            "data",
-            {}
-        )
-
-        if not isinstance(
-            data,
-            dict
-        ):
-            return None
-
-        fp = data.get(
-            "fp",
-            {}
-        )
-
-        if not isinstance(
-            fp,
-            dict
-        ):
-            return None
-
-        duration_text = fp.get(
-            "days_en"
-        )
-
-        # No duration information.
-        if duration_text is None:
-            return None
-
-        duration_text = str(
-            duration_text
-        ).strip()
-
-        # "-" means the service is suspended.
-        if duration_text == "":
-            return None
-
-        if duration_text == "-":
-            return None
-
-        return duration_text
-
-    except Exception as e:
-
-        print(
-            f"Could not get duration for "
-            f"{country_code}: {e}"
-        )
-
-        # If we cannot confirm the duration,
-        # do NOT show the price.
-        return None
 
 
 def main():
@@ -518,7 +522,7 @@ def main():
 
     output.append("")
 
-    # Sort countries alphabetically.
+    # Sort alphabetically.
     countries_sorted = sorted(
         countries,
         key=lambda country: str(
@@ -527,12 +531,15 @@ def main():
                 ""
             )
         ).lower()
-        if isinstance(country, dict)
+        if isinstance(
+            country,
+            dict
+        )
         else ""
     )
 
     available_count = 0
-    suspended_count = 0
+    unavailable_count = 0
 
     for country in countries_sorted:
 
@@ -562,29 +569,28 @@ def main():
             f"({country_code})..."
         )
 
-        # Get duration FIRST.
+        # ------------------------------------------------
+        # STEP 1
         #
-        # This determines whether ordinary-letter
-        # service is currently available.
-        duration_text = get_duration_text(
+        # Check ordinary-letter duration FIRST.
+        # ------------------------------------------------
+
+        duration = get_fp_duration(
             country_code
         )
 
         # ------------------------------------------------
-        # SERVICE SUSPENDED
+        # STEP 2
+        #
+        # If fp.days_en is missing/null/"-",
+        # ordinary-letter service is unavailable.
+        #
+        # IMPORTANT:
+        # We do NOT show the pricing data.
+        # We also do NOT use EMS duration.
         # ------------------------------------------------
-        #
-        # If the website gives "-" or no duration,
-        # do NOT show the price even if pricing data
-        # exists.
-        #
-        if duration_text is None:
 
-            print(
-                f"  {country_name}: "
-                f"ordinary-letter service "
-                f"appears suspended"
-            )
+        if duration is None:
 
             output.append(
                 country_name
@@ -598,7 +604,7 @@ def main():
             output.append(
                 "Ordinary letter "
                 "(20 g or less): "
-                "service suspended"
+                "service unavailable"
             )
 
             output.append(
@@ -607,16 +613,22 @@ def main():
 
             output.append("")
 
-            suspended_count += 1
+            unavailable_count += 1
+
+            print(
+                f"  {country_name}: "
+                f"ordinary-letter service "
+                f"unavailable"
+            )
 
             continue
 
         # ------------------------------------------------
-        # SERVICE AVAILABLE
+        # STEP 3
+        #
+        # Only now look at the price.
         # ------------------------------------------------
 
-        # Only calculate/show the price when
-        # a valid duration exists.
         price = find_country_pricing(
             country
         )
@@ -650,7 +662,7 @@ def main():
 
         output.append(
             "Delivery duration: "
-            f"{duration_text}"
+            f"{duration}"
         )
 
         output.append("")
@@ -679,15 +691,15 @@ def main():
     )
 
     print(
-        f"Countries with available "
-        f"ordinary-letter service: "
+        "Countries with available "
+        "ordinary-letter service: "
         f"{available_count}"
     )
 
     print(
-        f"Countries with suspended "
-        f"ordinary-letter service: "
-        f"{suspended_count}"
+        "Countries with unavailable "
+        "ordinary-letter service: "
+        f"{unavailable_count}"
     )
 
 
