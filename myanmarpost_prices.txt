@@ -1,52 +1,9 @@
-Myanmar Post - International Ordinary Letter Prices
-Maximum weight: 20 grams
-Service: Ordinary Letter (FP)
-================================================================================
+Myanmar Post International Ordinary Letter Prices
+Maximum weight: 20 g
 
-Australia (AU) | 11,000 Kyats | Delivery: between 3 and 10 days
-Austria (AT) | 11,000 Kyats | Delivery: None
-Bangladesh (BD) | 11,000 Kyats | Delivery: between 6 and 12 days
-Brunei Darussalam (BN) | 11,000 Kyats | Delivery: between 3 and 5 days
-Cambodia (KH) | 11,000 Kyats | Delivery: between 3 and 6 days
-Canada (CA) | 11,000 Kyats | Delivery: between 3 and 8 days
-Czech Republic (CZ) | 11,000 Kyats | Delivery: between 4 and 6 days
-Denmark (DK) | 11,000 Kyats | Delivery: between 3 and 8 days
-Egypt (EG) | 11,000 Kyats | Delivery: None
-Ethiopia (ET) | 11,000 Kyats | Delivery: None
-Finland (FI) | 11,000 Kyats | Delivery: between 2 and 15 days
-France (FR) | 11,000 Kyats | Delivery: between 3 and 10 days
-Germany (DE) | 11,000 Kyats | Delivery: between 4 and 10 days
-Greece (GR) | 11,000 Kyats | Delivery: between 3 and 5 days
-Hong Kong (HK) | 11,000 Kyats | Delivery: between 3 and 9 days
-India (IN) | 11,000 Kyats | Delivery: between 4 and 12 days
-Indonesia (ID) | 11,000 Kyats | Delivery: between 5 and 9 days
-Italy (IT) | 11,000 Kyats | Delivery: between 5 and 8 days
-Japan (JP) | 11,000 Kyats | Delivery: between 3 and 7 days
-Jordan (JO) | 11,000 Kyats | Delivery: None
-Laos (LA) | 11,000 Kyats | Delivery: between 4 and 5 days
-Malaysia (MY) | 11,000 Kyats | Delivery: between 3 and 6 days
-Netherlands (NL) | 11,000 Kyats | Delivery: between 5 and 8 days
-New Zealand (NZ) | 11,000 Kyats | Delivery: between 4 and 8 days
-Norway (NO) | 11,000 Kyats | Delivery: between 7 and 11 days
-Oman (OM) | 11,000 Kyats | Delivery: between 5 and 6 days
-Pakistan (PK) | 11,000 Kyats | Delivery: between 8 and 10 days
-Philippines (PH) | 11,000 Kyats | Delivery: between 6 and 12 days
-Poland (PL) | 11,000 Kyats | Delivery: between 7 and 10 days
-Portugal (PT) | 11,000 Kyats | Delivery: between 3 and 10 days
-Romania (RO) | 11,000 Kyats | Delivery: None
-Russian Federation (RU) | 11,000 Kyats | Delivery: between 6 and 11 days
-Singapore (SG) | 11,000 Kyats | Delivery: between 2 and 2 days
-South Africa (ZA) | 11,000 Kyats | Delivery: None
-South Korea (KR) | 11,000 Kyats | Delivery: between 2 and 6 days
-Spain (ES) | 11,000 Kyats | Delivery: between 6 and 12 days
-Sri Lanka (LK) | 11,000 Kyats | Delivery: between 4 and 7 days
-Sweden (SE) | 11,000 Kyats | Delivery: between 6 and 12 days
-Switzerland (CH) | 11,000 Kyats | Delivery: between 3 and 7 days
-Taiwan, Province of China (TW) | 11,000 Kyats | Delivery: between 4 and 7 days
-Thailand (TH) | 11,000 Kyats | Delivery: between 2 and 5 days
-Turkey (TR) | 11,000 Kyats | Delivery: between 2 and 13 days
-United Kingdom (GB) | 11,000 Kyats | Delivery: between 3 and 6 days
-Viet Nam (VN) | 11,000 Kyats | Delivery: between 2 and 13 days
-🇨🇳 China (CN-BJ) | 11,000 Kyats | Delivery: between 3 and 9 days
+Generated: 2026-08-11 06:18:03 UTC
 
-Total countries: 45
+Australia
+Country code: AU
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 10 days
