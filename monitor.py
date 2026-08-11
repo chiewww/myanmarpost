@@ -3,28 +3,55 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
+
 BASE_URL = "https://myanmarpost.com.mm"
 
 PRICING_URL = f"{BASE_URL}/pricing?tab=international"
 
 # Ordinary letters only.
+#
 # 0.02 kg = 20 grams.
 MAX_WEIGHT_KG = 0.02
 
 
 def get_response(url, headers):
-    request = urllib.request.Request(url, headers=headers)
+    """
+    Send an HTTP request and return:
+        status, content_type, body
+    """
+
+    request = urllib.request.Request(
+        url,
+        headers=headers
+    )
 
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=120
+        ) as response:
+
             body = response.read()
-            content_type = response.headers.get("Content-Type", "")
-            return response.status, content_type, body
+
+            content_type = response.headers.get(
+                "Content-Type",
+                ""
+            )
+
+            return (
+                response.status,
+                content_type,
+                body
+            )
 
     except urllib.error.HTTPError as e:
+
         body = e.read()
 
-        print(f"HTTP error {e.code} for {url}")
+        print(
+            f"HTTP error {e.code} for {url}"
+        )
+
         print(
             body[:1000].decode(
                 "utf-8",
@@ -37,9 +64,10 @@ def get_response(url, headers):
 
 def get_pricing_data():
     """
-    Download the international pricing data from Myanmar Post.
+    Download the international pricing data
+    from Myanmar Post.
 
-    This is the same endpoint used by the pricing page:
+    This is the endpoint used by the pricing page:
         /pricing?tab=international
     """
 
@@ -51,7 +79,10 @@ def get_pricing_data():
             "Chrome/151.0.0.0 Safari/537.36"
         ),
 
-        "Accept": "text/html, application/xhtml+xml",
+        "Accept": (
+            "text/html, "
+            "application/xhtml+xml"
+        ),
 
         "X-Inertia": "true",
 
@@ -60,7 +91,8 @@ def get_pricing_data():
         "X-Inertia-Version":
             "34e9d596c2ba005758a128ed0067da87",
 
-        "Referer": f"{BASE_URL}/pricing",
+        "Referer":
+            f"{BASE_URL}/pricing",
     }
 
     status, content_type, body = get_response(
@@ -68,9 +100,17 @@ def get_pricing_data():
         headers
     )
 
-    print(f"Pricing response: HTTP {status}")
-    print(f"Content-Type: {content_type}")
-    print(f"Response size: {len(body)} bytes")
+    print(
+        f"Pricing response: HTTP {status}"
+    )
+
+    print(
+        f"Content-Type: {content_type}"
+    )
+
+    print(
+        f"Response size: {len(body)} bytes"
+    )
 
     text = body.decode(
         "utf-8",
@@ -79,15 +119,24 @@ def get_pricing_data():
 
     stripped = text.lstrip()
 
-    if not stripped.startswith("{") and not stripped.startswith("["):
+    if (
+        not stripped.startswith("{")
+        and not stripped.startswith("[")
+    ):
 
-        print("Pricing response is not JSON.")
+        print(
+            "Pricing response is not JSON."
+        )
 
-        print("First 500 characters:")
+        print(
+            "First 500 characters:"
+        )
+
         print(text[:500])
 
         raise RuntimeError(
-            "Myanmar Post pricing endpoint did not return JSON."
+            "Myanmar Post pricing endpoint "
+            "did not return JSON."
         )
 
     try:
@@ -96,24 +145,32 @@ def get_pricing_data():
 
     except json.JSONDecodeError as e:
 
-        print("Could not decode pricing response as JSON.")
+        print(
+            "Could not decode pricing response "
+            "as JSON."
+        )
 
         print(text[:1000])
 
         raise RuntimeError(
-            f"Invalid JSON returned by Myanmar Post: {e}"
+            f"Invalid JSON returned by "
+            f"Myanmar Post: {e}"
         ) from e
 
 
 def get_duration(country_code):
     """
-    Get the ordinary-letter delivery duration for a country.
+    Get the delivery-duration information
+    for a country.
 
     Example:
         /deliver-duration/AU
     """
 
-    url = f"{BASE_URL}/deliver-duration/{country_code}"
+    url = (
+        f"{BASE_URL}/deliver-duration/"
+        f"{country_code}"
+    )
 
     headers = {
         "User-Agent": (
@@ -124,12 +181,15 @@ def get_duration(country_code):
         ),
 
         "Accept": (
-            "application/json, text/plain, */*"
+            "application/json, "
+            "text/plain, */*"
         ),
 
-        "X-Requested-With": "XMLHttpRequest",
+        "X-Requested-With":
+            "XMLHttpRequest",
 
-        "Referer": f"{BASE_URL}/pricing",
+        "Referer":
+            f"{BASE_URL}/pricing",
     }
 
     status, content_type, body = get_response(
@@ -156,22 +216,25 @@ def get_duration(country_code):
     except json.JSONDecodeError as e:
 
         print(
-            f"Invalid duration JSON for {country_code}:"
+            f"Invalid duration JSON for "
+            f"{country_code}:"
         )
 
         print(text[:500])
 
         raise RuntimeError(
-            f"Invalid duration JSON for {country_code}: {e}"
+            f"Invalid duration JSON for "
+            f"{country_code}: {e}"
         ) from e
 
 
 def find_country_list(obj):
     """
-    Recursively search the pricing JSON for the list
-    containing country records.
+    Recursively search the pricing JSON
+    for the list containing country records.
 
-    A country record contains alpha_2_code.
+    A country record contains:
+        alpha_2_code
     """
 
     if isinstance(obj, list):
@@ -190,7 +253,9 @@ def find_country_list(obj):
 
         for item in obj:
 
-            result = find_country_list(item)
+            result = find_country_list(
+                item
+            )
 
             if result:
                 return result
@@ -199,7 +264,9 @@ def find_country_list(obj):
 
         for value in obj.values():
 
-            result = find_country_list(value)
+            result = find_country_list(
+                value
+            )
 
             if result:
                 return result
@@ -209,25 +276,32 @@ def find_country_list(obj):
 
 def find_20g_price(letter_rates):
     """
-    Find the ordinary-letter price for 20 g or less.
+    Find the ordinary-letter price for
+    20 g or less.
 
-    Myanmar Post uses kilograms in the JSON.
+    Myanmar Post uses kilograms.
 
-    Therefore:
         20 g = 0.02 kg
 
-    If multiple rates are <= 20 g, use the highest
-    available weight not exceeding 20 g.
+    If several rates are <= 20 g,
+    use the highest available weight
+    not exceeding 20 g.
     """
 
-    if not isinstance(letter_rates, list):
+    if not isinstance(
+        letter_rates,
+        list
+    ):
         return None
 
     eligible = []
 
     for item in letter_rates:
 
-        if not isinstance(item, dict):
+        if not isinstance(
+            item,
+            dict
+        ):
             continue
 
         try:
@@ -250,14 +324,17 @@ def find_20g_price(letter_rates):
         if weight <= MAX_WEIGHT_KG:
 
             eligible.append(
-                (weight, amount)
+                (
+                    weight,
+                    amount
+                )
             )
 
     if not eligible:
         return None
 
-    # Select the highest available rate
-    # that is still 20 g or less.
+    # Select the highest available
+    # rate that is still 20 g or less.
     eligible.sort(
         key=lambda x: x[0]
     )
@@ -285,7 +362,10 @@ def find_country_pricing(country):
         {}
     )
 
-    if not isinstance(fp, dict):
+    if not isinstance(
+        fp,
+        dict
+    ):
         return None
 
     letter = fp.get(
@@ -300,26 +380,33 @@ def find_country_pricing(country):
 
 def get_duration_text(country_code):
     """
-    Return the ordinary-letter delivery duration.
+    Get the ordinary-letter delivery duration.
 
-    The API response has this structure:
+    We use ONLY:
 
-    {
-        "data": {
-            "alpha_2_code": "AU",
-            "country": "Australia",
-            "fp": {
-                "dispatch": 3,
-                "final": 10,
-                "days_en": "between 3 and 10 days"
-            },
-            "ems": {
-                ...
-            }
-        }
-    }
+        data.fp.days_en
 
-    We use ONLY data.fp.days_en.
+    Examples of valid durations:
+
+        "between 3 and 10 days"
+        "between 21 and 30 days"
+        "between 30 and 45 days"
+
+    There is NO fixed limit on the number of days.
+
+    IMPORTANT:
+
+    If days_en is:
+        "-"
+        ""
+        null
+        missing
+
+    then the ordinary-letter service is treated
+    as SUSPENDED.
+
+    In that situation this function returns None,
+    and the price will NOT be displayed.
     """
 
     try:
@@ -333,20 +420,43 @@ def get_duration_text(country_code):
             {}
         )
 
+        if not isinstance(
+            data,
+            dict
+        ):
+            return None
+
         fp = data.get(
             "fp",
             {}
         )
 
+        if not isinstance(
+            fp,
+            dict
+        ):
+            return None
+
         duration_text = fp.get(
             "days_en"
         )
 
-        if duration_text:
+        # No duration information.
+        if duration_text is None:
+            return None
 
-            return duration_text
+        duration_text = str(
+            duration_text
+        ).strip()
 
-        return "delivery duration unavailable"
+        # "-" means the service is suspended.
+        if duration_text == "":
+            return None
+
+        if duration_text == "-":
+            return None
+
+        return duration_text
 
     except Exception as e:
 
@@ -355,7 +465,9 @@ def get_duration_text(country_code):
             f"{country_code}: {e}"
         )
 
-        return "delivery duration unavailable"
+        # If we cannot confirm the duration,
+        # do NOT show the price.
+        return None
 
 
 def main():
@@ -415,9 +527,12 @@ def main():
                 ""
             )
         ).lower()
+        if isinstance(country, dict)
+        else ""
     )
 
-    successful = 0
+    available_count = 0
+    suspended_count = 0
 
     for country in countries_sorted:
 
@@ -447,14 +562,63 @@ def main():
             f"({country_code})..."
         )
 
-        # Ordinary letter price only.
-        price = find_country_pricing(
-            country
-        )
-
-        # Ordinary letter delivery duration only.
+        # Get duration FIRST.
+        #
+        # This determines whether ordinary-letter
+        # service is currently available.
         duration_text = get_duration_text(
             country_code
+        )
+
+        # ------------------------------------------------
+        # SERVICE SUSPENDED
+        # ------------------------------------------------
+        #
+        # If the website gives "-" or no duration,
+        # do NOT show the price even if pricing data
+        # exists.
+        #
+        if duration_text is None:
+
+            print(
+                f"  {country_name}: "
+                f"ordinary-letter service "
+                f"appears suspended"
+            )
+
+            output.append(
+                country_name
+            )
+
+            output.append(
+                f"Country code: "
+                f"{country_code}"
+            )
+
+            output.append(
+                "Ordinary letter "
+                "(20 g or less): "
+                "service suspended"
+            )
+
+            output.append(
+                "Delivery duration: -"
+            )
+
+            output.append("")
+
+            suspended_count += 1
+
+            continue
+
+        # ------------------------------------------------
+        # SERVICE AVAILABLE
+        # ------------------------------------------------
+
+        # Only calculate/show the price when
+        # a valid duration exists.
+        price = find_country_pricing(
+            country
         )
 
         output.append(
@@ -462,7 +626,8 @@ def main():
         )
 
         output.append(
-            f"Country code: {country_code}"
+            f"Country code: "
+            f"{country_code}"
         )
 
         if price is None:
@@ -481,7 +646,7 @@ def main():
                 f"{price:,} Kyats"
             )
 
-            successful += 1
+            available_count += 1
 
         output.append(
             "Delivery duration: "
@@ -503,13 +668,26 @@ def main():
         file.write(result)
 
     print("")
-    print("========================================")
+    print(
+        "========================================"
+    )
+
     print(result)
-    print("========================================")
 
     print(
-        f"Countries with a 20 g "
-        f"ordinary-letter price: {successful}"
+        "========================================"
+    )
+
+    print(
+        f"Countries with available "
+        f"ordinary-letter service: "
+        f"{available_count}"
+    )
+
+    print(
+        f"Countries with suspended "
+        f"ordinary-letter service: "
+        f"{suspended_count}"
     )
 
 
