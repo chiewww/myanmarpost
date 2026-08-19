@@ -4,21 +4,26 @@ import re
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from http.cookiejar import CookieJar
 
 
 BASE_URL = "https://myanmarpost.com.mm"
-PRICING_URL = f"{BASE_URL}/pricing?tab=international"
+PRICING_URL = f"{BASE_URL}/pricing"
 
 # Ordinary letter maximum weight.
 # 20 grams = 0.02 kg
 MAX_LETTER_WEIGHT_KG = 0.02
 
 # HTTP settings
-REQUEST_TIMEOUT = 120
+REQUEST_TIMEOUT = 60
 MAX_REQUEST_ATTEMPTS = 3
 RETRY_DELAYS = (2, 5, 10)
+
+# Number of countries to query at the same time.
+# 8 is deliberately conservative for the Myanmar Post server.
+MAX_WORKERS = 8
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) "
@@ -28,18 +33,27 @@ USER_AGENT = (
 )
 
 
+# =========================================================
+# MYANMAR POST CLIENT
+# =========================================================
+
 class MyanmarPostClient:
     """
     HTTP client for Myanmar Post.
 
-    The client first loads the normal /pricing page.
+    The normal /pricing page contains the Inertia page
+    data used to obtain the international country pricing.
 
-    We intentionally avoid the separate
-    /pricing?tab=international Inertia request because
-    that endpoint was returning HTTP 500.
+    Country delivery durations are retrieved separately.
 
-    The client also retries temporary SSL, connection,
-    timeout, and 5xx errors.
+    Requests include retries for:
+        - SSL errors
+        - connection errors
+        - timeouts
+        - HTTP 500
+        - HTTP 502
+        - HTTP 503
+        - HTTP 504
     """
 
     def __init__(self):
@@ -55,13 +69,7 @@ class MyanmarPostClient:
 
     def _request(self, url, headers=None):
         """
-        Make an HTTP GET request with retries.
-
-        Retries:
-            - SSL errors
-            - connection errors
-            - timeouts
-            - HTTP 500/502/503/504
+        Perform a GET request with retries.
         """
 
         last_error = None
@@ -77,12 +85,6 @@ class MyanmarPostClient:
             )
 
             try:
-                print(
-                    f"HTTP request attempt "
-                    f"{attempt}/{MAX_REQUEST_ATTEMPTS}: "
-                    f"{url}"
-                )
-
                 with self.opener.open(
                     request,
                     timeout=REQUEST_TIMEOUT,
@@ -109,40 +111,15 @@ class MyanmarPostClient:
                     f"HTTP error {e.code} for {url}"
                 )
 
-                print(
-                    f"Reason: {e.reason}"
-                )
-
-                print(
-                    f"Response body length: "
-                    f"{len(body)} bytes"
-                )
-
                 if body:
                     print(
-                        "Response body:"
-                    )
-
-                    print(
-                        body[:2000].decode(
-                            "utf-8",
-                            errors="replace",
-                        )
-                    )
-
-                print(
-                    "Response headers:"
-                )
-
-                for key, value in e.headers.items():
-                    print(
-                        f"  {key}: {value}"
+                        f"Response body length: "
+                        f"{len(body)} bytes"
                     )
 
                 # Retry temporary server errors.
                 if (
-                    e.code
-                    in (
+                    e.code in (
                         500,
                         502,
                         503,
@@ -159,14 +136,11 @@ class MyanmarPostClient:
                     ]
 
                     print(
-                        f"Temporary HTTP "
-                        f"{e.code}. "
-                        f"Retrying in "
-                        f"{delay} seconds..."
+                        f"Temporary HTTP {e.code}. "
+                        f"Retrying in {delay} seconds..."
                     )
 
                     time.sleep(delay)
-
                     continue
 
                 raise
@@ -181,13 +155,11 @@ class MyanmarPostClient:
 
                 print(
                     f"Connection/SSL error "
-                    f"on attempt "
+                    f"for {url} "
+                    f"(attempt "
                     f"{attempt}/"
-                    f"{MAX_REQUEST_ATTEMPTS}:"
-                )
-
-                print(
-                    repr(e)
+                    f"{MAX_REQUEST_ATTEMPTS}): "
+                    f"{repr(e)}"
                 )
 
                 if attempt < MAX_REQUEST_ATTEMPTS:
@@ -198,28 +170,8 @@ class MyanmarPostClient:
                         )
                     ]
 
-                    print(
-                        f"Retrying in "
-                        f"{delay} seconds..."
-                    )
-
                     time.sleep(delay)
-
                     continue
-
-                raise
-
-            except Exception as e:
-                print(
-                    f"Unexpected request error "
-                    f"on attempt "
-                    f"{attempt}/"
-                    f"{MAX_REQUEST_ATTEMPTS}:"
-                )
-
-                print(
-                    repr(e)
-                )
 
                 raise
 
@@ -230,12 +182,9 @@ class MyanmarPostClient:
             f"Request failed: {url}"
         )
 
-    def _browser_headers(
-        self,
-        referer=None,
-    ):
+    def _browser_headers(self, referer=None):
         """
-        Headers for a normal browser-style request.
+        Browser-style request headers.
         """
 
         headers = {
@@ -246,12 +195,9 @@ class MyanmarPostClient:
                 "application/json;q=0.9, "
                 "*/*;q=0.8"
             ),
-            "Accept-Language": (
-                "en-US,en;q=0.9"
-            ),
+            "Accept-Language": "en-US,en;q=0.9",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
-            "Connection": "keep-alive",
         }
 
         if referer:
@@ -259,13 +205,9 @@ class MyanmarPostClient:
 
         return headers
 
-    def _extract_inertia_version(
-        self,
-        body,
-    ):
+    def _extract_inertia_version(self, body):
         """
-        Extract the current Inertia version
-        from the /pricing HTML.
+        Extract the current Inertia version from HTML.
         """
 
         text = body.decode(
@@ -338,13 +280,9 @@ class MyanmarPostClient:
 
         return None
 
-    def _extract_inertia_page(
-        self,
-        body,
-    ):
+    def _extract_inertia_page(self, body):
         """
-        Extract and decode the Inertia
-        data-page JSON.
+        Extract the Inertia data-page JSON.
         """
 
         text = body.decode(
@@ -376,72 +314,9 @@ class MyanmarPostClient:
         except json.JSONDecodeError:
             return None
 
-    def refresh_inertia_version(self):
-        """
-        Load /pricing and discover the
-        current Inertia version.
-        """
-
-        print(
-            "Loading Myanmar Post "
-            "pricing page..."
-        )
-
-        url = f"{BASE_URL}/pricing"
-
-        (
-            status,
-            content_type,
-            body,
-            response_headers,
-        ) = self._request(
-            url,
-            self._browser_headers(),
-        )
-
-        print(
-            f"Pricing page: HTTP {status}, "
-            f"{content_type}, "
-            f"{len(body)} bytes"
-        )
-
-        version = (
-            self._extract_inertia_version(
-                body
-            )
-        )
-
-        if not version:
-            print(
-                "Could not find the current "
-                "Inertia version."
-            )
-
-            raise RuntimeError(
-                "Could not determine "
-                "Myanmar Post's current "
-                "Inertia version."
-            )
-
-        self.inertia_version = version
-
-        print(
-            "Detected current Inertia "
-            f"version: "
-            f"{self.inertia_version}"
-        )
-
-        return version
-
     def get_pricing_data(self):
         """
-        Load the normal /pricing page.
-
-        We intentionally do NOT make the
-        /pricing?tab=international request.
-
-        The normal page already contains
-        an Inertia data-page payload.
+        Download and decode the normal pricing page.
         """
 
         print(
@@ -449,15 +324,13 @@ class MyanmarPostClient:
             "pricing page..."
         )
 
-        url = f"{BASE_URL}/pricing"
-
         (
             status,
             content_type,
             body,
             response_headers,
         ) = self._request(
-            url,
+            PRICING_URL,
             self._browser_headers(),
         )
 
@@ -467,7 +340,6 @@ class MyanmarPostClient:
             f"{len(body)} bytes"
         )
 
-        # Discover the version for diagnostics.
         version = (
             self._extract_inertia_version(
                 body
@@ -479,8 +351,7 @@ class MyanmarPostClient:
 
             print(
                 "Detected current Inertia "
-                f"version: "
-                f"{version}"
+                f"version: {version}"
             )
 
         page_data = (
@@ -501,73 +372,11 @@ class MyanmarPostClient:
             "Inertia page data."
         )
 
-        if isinstance(
-            page_data,
-            dict,
-        ):
-            print(
-                "Inertia page keys:",
-                list(
-                    page_data.keys()
-                ),
-            )
-
-            props = page_data.get(
-                "props"
-            )
-
-            if isinstance(
-                props,
-                dict,
-            ):
-                print(
-                    "Inertia props keys:",
-                    list(
-                        props.keys()
-                    ),
-                )
-
-        # Save diagnostic data.
-        try:
-            with open(
-                "myanmarpost_inertia_debug.json",
-                "w",
-                encoding="utf-8",
-            ) as debug_file:
-
-                json.dump(
-                    page_data,
-                    debug_file,
-                    ensure_ascii=False,
-                    indent=2,
-                )
-
-            print(
-                "Saved diagnostic data to "
-                "myanmarpost_inertia_debug.json"
-            )
-
-        except Exception as e:
-            print(
-                "Could not write diagnostic "
-                f"JSON: {e}"
-            )
-
         return page_data
 
-    def get_duration(
-        self,
-        country_code,
-    ):
+    def get_duration(self, country_code):
         """
-        Get delivery duration information.
-
-        Example:
-            /deliver-duration/AU
-
-        Response:
-            data.fp
-            data.ems
+        Get delivery duration for one country.
         """
 
         url = (
@@ -581,9 +390,7 @@ class MyanmarPostClient:
                 "application/json, "
                 "text/plain, */*"
             ),
-            "Accept-Language": (
-                "en-US,en;q=0.9"
-            ),
+            "Accept-Language": "en-US,en;q=0.9",
             "X-Requested-With": (
                 "XMLHttpRequest"
             ),
@@ -602,13 +409,6 @@ class MyanmarPostClient:
             headers,
         )
 
-        print(
-            f"Duration {country_code}: "
-            f"HTTP {status}, "
-            f"{content_type}, "
-            f"{len(body)} bytes"
-        )
-
         text = body.decode(
             "utf-8",
             errors="replace",
@@ -620,29 +420,19 @@ class MyanmarPostClient:
             )
 
         except json.JSONDecodeError as e:
-            print(
-                f"Invalid duration JSON "
-                f"for {country_code}:"
-            )
-
-            print(
-                text[:1000]
-            )
-
             raise RuntimeError(
-                "Invalid duration JSON "
+                f"Invalid duration JSON "
                 f"for {country_code}: {e}"
             ) from e
 
 
-# ---------------------------------------------------------
+# =========================================================
 # FIND COUNTRY LIST
-# ---------------------------------------------------------
+# =========================================================
 
 def find_country_list(obj):
     """
-    Recursively find the list containing
-    country records.
+    Recursively find the list containing country records.
 
     Country records contain:
         alpha_2_code
@@ -691,21 +481,14 @@ def find_country_list(obj):
     return []
 
 
-# ---------------------------------------------------------
+# =========================================================
 # ORDINARY LETTER PRICE
-# ---------------------------------------------------------
+# =========================================================
 
-def find_20g_letter_price(
-    letter_rates,
-):
+def find_20g_letter_price(letter_rates):
     """
-    Find the ordinary-letter price
-    for 20 g or less.
-
-    Myanmar Post represents weight
-    in kg.
-
-        20 g = 0.02 kg
+    Find the ordinary-letter price for
+    20 g or less.
     """
 
     if not isinstance(
@@ -761,22 +544,14 @@ def find_20g_letter_price(
     return eligible[-1][1]
 
 
-# ---------------------------------------------------------
+# =========================================================
 # EMS PRICE
-# ---------------------------------------------------------
+# =========================================================
 
-def find_ems_price(
-    ems_rates,
-):
+def find_ems_price(ems_rates):
     """
-    Find the EMS price for an item
-    weighing 20 g or less.
-
-    EMS normally starts at a larger
-    weight bracket, such as 0.5 kg.
-
-    Therefore, use the smallest EMS
-    bracket that covers 20 g.
+    Find the smallest EMS price bracket
+    that covers a 20 g item.
     """
 
     if not isinstance(
@@ -832,15 +607,13 @@ def find_ems_price(
     return eligible[0][1]
 
 
-# ---------------------------------------------------------
+# =========================================================
 # COUNTRY PRICING
-# ---------------------------------------------------------
+# =========================================================
 
-def find_country_letter_price(
-    country,
-):
+def find_country_letter_price(country):
     """
-    Get ordinary-letter pricing from:
+    Get ordinary-letter price from:
 
         country
             -> fp
@@ -868,11 +641,9 @@ def find_country_letter_price(
     )
 
 
-def find_country_ems_price(
-    country,
-):
+def find_country_ems_price(country):
     """
-    Get EMS pricing from:
+    Get EMS price from:
 
         country
             -> ems
@@ -888,27 +659,16 @@ def find_country_ems_price(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # SERVICE AVAILABILITY
-# ---------------------------------------------------------
+# =========================================================
 
-def get_service_information(
-    client,
-    country_code,
+def parse_service_information(
+    duration_data,
 ):
     """
-    Get FP and EMS availability
-    separately.
-
-    A service is available only when
-    days_en contains actual text.
+    Parse FP and EMS service availability.
     """
-
-    duration_data = (
-        client.get_duration(
-            country_code
-        )
-    )
 
     data = duration_data.get(
         "data",
@@ -972,17 +732,13 @@ def get_service_information(
     )
 
     return {
-        "fp_available": (
-            fp_available
-        ),
+        "fp_available": fp_available,
         "fp_duration": (
             fp_duration
             if fp_available
             else None
         ),
-        "ems_available": (
-            ems_available
-        ),
+        "ems_available": ems_available,
         "ems_duration": (
             ems_duration
             if ems_available
@@ -991,17 +747,73 @@ def get_service_information(
     }
 
 
-# ---------------------------------------------------------
+# =========================================================
+# GET ONE COUNTRY'S SERVICE INFORMATION
+# =========================================================
+
+def fetch_country_service(
+    client,
+    country_code,
+):
+    """
+    Worker function used by the thread pool.
+
+    Returns:
+        country_code,
+        service_information,
+        error
+    """
+
+    try:
+        duration_data = (
+            client.get_duration(
+                country_code
+            )
+        )
+
+        service = (
+            parse_service_information(
+                duration_data
+            )
+        )
+
+        return (
+            country_code,
+            service,
+            None,
+        )
+
+    except Exception as e:
+
+        return (
+            country_code,
+            {
+                "fp_available": False,
+                "fp_duration": None,
+                "ems_available": False,
+                "ems_duration": None,
+            },
+            e,
+        )
+
+
+# =========================================================
 # MAIN
-# ---------------------------------------------------------
+# =========================================================
 
 def main():
+    start_time = time.time()
+
     print(
         "Downloading Myanmar Post "
         "international pricing..."
     )
 
     client = MyanmarPostClient()
+
+    # -----------------------------------------------------
+    # Download pricing.
+    # -----------------------------------------------------
 
     data = client.get_pricing_data()
 
@@ -1018,6 +830,110 @@ def main():
     print(
         f"Found {len(countries)} countries."
     )
+
+    # -----------------------------------------------------
+    # Sort countries.
+    # -----------------------------------------------------
+
+    countries_sorted = sorted(
+        countries,
+        key=lambda country: str(
+            country.get(
+                "name_en",
+                "",
+            )
+        ).lower(),
+    )
+
+    # -----------------------------------------------------
+    # Fetch all delivery durations in parallel.
+    # -----------------------------------------------------
+
+    print(
+        ""
+    )
+
+    print(
+        f"Fetching delivery durations "
+        f"using {MAX_WORKERS} workers..."
+    )
+
+    service_results = {}
+
+    with ThreadPoolExecutor(
+        max_workers=MAX_WORKERS
+    ) as executor:
+
+        futures = {}
+
+        for country in countries_sorted:
+
+            if not isinstance(
+                country,
+                dict,
+            ):
+                continue
+
+            country_code = str(
+                country.get(
+                    "alpha_2_code",
+                    "",
+                )
+            ).upper()
+
+            if not country_code:
+                continue
+
+            future = executor.submit(
+                fetch_country_service,
+                client,
+                country_code,
+            )
+
+            futures[future] = (
+                country_code
+            )
+
+        completed = 0
+        total = len(futures)
+
+        for future in as_completed(
+            futures
+        ):
+
+            country_code = futures[
+                future
+            ]
+
+            (
+                returned_code,
+                service,
+                error,
+            ) = future.result()
+
+            service_results[
+                returned_code
+            ] = service
+
+            completed += 1
+
+            if error is not None:
+                print(
+                    f"[{completed}/{total}] "
+                    f"{country_code}: "
+                    f"duration unavailable "
+                    f"({error})"
+                )
+
+            else:
+                print(
+                    f"[{completed}/{total}] "
+                    f"{country_code}: OK"
+                )
+
+    # -----------------------------------------------------
+    # Build output.
+    # -----------------------------------------------------
 
     output = []
 
@@ -1044,18 +960,12 @@ def main():
 
     output.append("")
 
-    countries_sorted = sorted(
-        countries,
-        key=lambda country: str(
-            country.get(
-                "name_en",
-                "",
-            )
-        ).lower(),
-    )
-
     fp_available_count = 0
     ems_available_count = 0
+
+    # -----------------------------------------------------
+    # Process countries.
+    # -----------------------------------------------------
 
     for country in countries_sorted:
 
@@ -1086,29 +996,18 @@ def main():
         )
 
         # -------------------------------------------------
-        # Get service availability.
+        # Service information.
         # -------------------------------------------------
 
-        try:
-            service = (
-                get_service_information(
-                    client,
-                    country_code,
-                )
-            )
-
-        except Exception as e:
-            print(
-                f"Could not get duration "
-                f"for {country_code}: {e}"
-            )
-
-            service = {
+        service = service_results.get(
+            country_code,
+            {
                 "fp_available": False,
                 "fp_duration": None,
                 "ems_available": False,
                 "ems_duration": None,
-            }
+            },
+        )
 
         fp_available = service[
             "fp_available"
@@ -1127,7 +1026,7 @@ def main():
         ]
 
         # -------------------------------------------------
-        # Get prices.
+        # Prices.
         # -------------------------------------------------
 
         fp_price = (
@@ -1143,7 +1042,7 @@ def main():
         )
 
         # -------------------------------------------------
-        # Country name.
+        # Country.
         # -------------------------------------------------
 
         output.append(
@@ -1163,6 +1062,7 @@ def main():
             fp_available_count += 1
 
             if fp_price is not None:
+
                 output.append(
                     "Ordinary letter "
                     "(20 g or less): "
@@ -1170,6 +1070,7 @@ def main():
                 )
 
             else:
+
                 output.append(
                     "Ordinary letter "
                     "(20 g or less): "
@@ -1198,12 +1099,14 @@ def main():
             ems_available_count += 1
 
             if ems_price is not None:
+
                 output.append(
                     "EMS (20 g or less): "
                     f"{ems_price:,} Kyats"
                 )
 
             else:
+
                 output.append(
                     "EMS (20 g or less): "
                     "price unavailable"
@@ -1217,7 +1120,7 @@ def main():
         output.append("")
 
     # -----------------------------------------------------
-    # WRITE FILE
+    # WRITE OUTPUT FILE
     # -----------------------------------------------------
 
     result = "\n".join(
@@ -1237,6 +1140,11 @@ def main():
     # -----------------------------------------------------
     # DISPLAY RESULT
     # -----------------------------------------------------
+
+    elapsed = (
+        time.time()
+        - start_time
+    )
 
     print("")
 
@@ -1267,6 +1175,19 @@ def main():
         "myanmarpost_prices.txt"
     )
 
+    print(
+        ""
+    )
+
+    print(
+        f"Total runtime: "
+        f"{elapsed:.1f} seconds"
+    )
+
+
+# =========================================================
+# START
+# =========================================================
 
 if __name__ == "__main__":
     main()
