@@ -1,7 +1,7 @@
 Myanmar Post International Ordinary Letter / EMS Prices
 Ordinary letter maximum weight: 20 g
 
-Generated: 2026-08-19 06:42:05 UTC
+Generated: 2026-08-19 06:48:55 UTC
 
 Australia
 Country code: AU
@@ -25,7 +25,10 @@ EMS delivery duration: between 5 and 13 days
 
 Brunei Darussalam
 Country code: BN
-Ordinary letter (20 g or less): service suspended
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 5 days
+EMS (20 g or less): 80,000 Kyats
+EMS delivery duration: between 3 and 3 days
 
 Cambodia
 Country code: KH
@@ -252,7 +255,10 @@ EMS delivery duration: between 4 and 8 days
 
 Switzerland
 Country code: CH
-Ordinary letter (20 g or less): service suspended
+Ordinary letter (20 g or less): 11,000 Kyats
+Delivery duration: between 3 and 7 days
+EMS (20 g or less): 180,000 Kyats
+EMS delivery duration: between 3 and 7 days
 
 Taiwan, Province of China
 Country code: TW
