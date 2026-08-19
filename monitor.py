@@ -217,139 +217,73 @@ class MyanmarPostClient:
 
         return version
 
-    def get_pricing_data(self):
-        """
-        Download international pricing data.
+ def get_pricing_data(self):
+    """
+    Load the normal pricing page and extract its Inertia
+    data-page payload.
 
-        The site uses an Inertia request for the international tab.
-        The current X-Inertia-Version is discovered dynamically instead
-        of being hard-coded.
-        """
-        self.refresh_inertia_version()
+    This avoids the /pricing?tab=international Inertia
+    request, which currently returns HTTP 500.
+    """
+    print("Loading Myanmar Post pricing page...")
 
-        for attempt in range(1, MAX_PRICING_ATTEMPTS + 1):
-            headers = {
-                "User-Agent": USER_AGENT,
-                "Accept": (
-                    "text/html, "
-                    "application/xhtml+xml"
-                ),
-                "Accept-Language": "en-US,en;q=0.9",
-                "X-Inertia": "true",
-                "X-Requested-With": "XMLHttpRequest",
-                "X-Inertia-Version": self.inertia_version,
-                "Referer": f"{BASE_URL}/pricing",
-            }
+    url = f"{BASE_URL}/pricing"
 
-            print(
-                f"Downloading international pricing "
-                f"(attempt {attempt}/{MAX_PRICING_ATTEMPTS})..."
-            )
+    status, content_type, body, response_headers = self._request(
+        url,
+        self._browser_headers(),
+    )
 
-            try:
-                (
-                    status,
-                    content_type,
-                    body,
-                    response_headers,
-                ) = self._request(
-                    PRICING_URL,
-                    headers,
-                )
+    print(
+        f"Pricing page: HTTP {status}, "
+        f"{content_type}, {len(body)} bytes"
+    )
 
-            except urllib.error.HTTPError as e:
-                # A 409 is especially important for Inertia.  It can
-                # indicate that the client version is stale.  Refresh
-                # the page/version and retry.
-                if e.code == 409 and attempt < MAX_PRICING_ATTEMPTS:
-                    delay = RETRY_DELAYS[
-                        min(attempt - 1, len(RETRY_DELAYS) - 1)
-                    ]
+    text = body.decode(
+        "utf-8",
+        errors="replace",
+    )
 
-                    print(
-                        "Received HTTP 409 from Myanmar Post. "
-                        "Refreshing the Inertia version before retrying..."
-                    )
+    # Find the Inertia data-page attribute.
+    match = re.search(
+        r'data-page\s*=\s*(["\'])(.*?)\1',
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
 
-                    time.sleep(delay)
-                    self.refresh_inertia_version()
-                    continue
-
-                raise
-
-            print(
-                f"Pricing response: HTTP {status}"
-            )
-            print(
-                f"Content-Type: {content_type}"
-            )
-            print(
-                f"Response size: {len(body)} bytes"
-            )
-
-            text = body.decode(
-                "utf-8",
-                errors="replace",
-            )
-
-            stripped = text.lstrip()
-
-            if (
-                not stripped.startswith("{")
-                and not stripped.startswith("[")
-            ):
-                print(
-                    "Pricing response is not JSON."
-                )
-                print(
-                    "First 1000 characters:"
-                )
-                print(text[:1000])
-
-                # If we got an HTML response containing a newer version,
-                # try to learn it and make one more request.
-                new_version = self._extract_inertia_version(body)
-
-                if (
-                    new_version
-                    and new_version != self.inertia_version
-                    and attempt < MAX_PRICING_ATTEMPTS
-                ):
-                    print(
-                        "The response contains a different Inertia "
-                        "version. Updating and retrying..."
-                    )
-                    self.inertia_version = new_version
-                    time.sleep(
-                        RETRY_DELAYS[
-                            min(attempt - 1, len(RETRY_DELAYS) - 1)
-                        ]
-                    )
-                    continue
-
-                raise RuntimeError(
-                    "Myanmar Post pricing endpoint "
-                    "did not return JSON."
-                )
-
-            try:
-                return json.loads(text)
-
-            except json.JSONDecodeError as e:
-                print(
-                    "Could not decode pricing response "
-                    "as JSON."
-                )
-                print(text[:2000])
-
-                raise RuntimeError(
-                    f"Invalid JSON returned by "
-                    f"Myanmar Post: {e}"
-                ) from e
-
+    if not match:
         raise RuntimeError(
-            "Unable to retrieve Myanmar Post pricing data."
+            "Could not find Inertia data-page in /pricing HTML."
         )
+
+    raw_page = html.unescape(match.group(2))
+
+    try:
+        page_data = json.loads(raw_page)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f"Could not decode Inertia page data: {e}"
+        ) from e
+
+    print("Successfully decoded Inertia page data.")
+
+    # Show the top-level structure so we can verify
+    # where Myanmar Post put the pricing data.
+    if isinstance(page_data, dict):
+        print(
+            "Inertia page keys:",
+            list(page_data.keys())
+        )
+
+        props = page_data.get("props")
+
+        if isinstance(props, dict):
+            print(
+                "Inertia props keys:",
+                list(props.keys())
+            )
+
+    return page_data
 
     def get_duration(self, country_code):
         """
