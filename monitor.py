@@ -17,8 +17,8 @@ MAX_LETTER_WEIGHT_KG = 0.02
 
 # HTTP settings
 REQUEST_TIMEOUT = 120
-MAX_PRICING_ATTEMPTS = 3
-RETRY_DELAYS = (1, 3, 6)
+MAX_REQUEST_ATTEMPTS = 3
+RETRY_DELAYS = (2, 5, 10)
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) "
@@ -30,72 +30,214 @@ USER_AGENT = (
 
 class MyanmarPostClient:
     """
-    Small HTTP client for Myanmar Post.
+    HTTP client for Myanmar Post.
 
-    The normal /pricing page is loaded first. The page contains
-    an Inertia data-page payload. We use that payload instead of
-    making the separate /pricing?tab=international request that
-    was returning HTTP 500.
+    The client first loads the normal /pricing page.
+
+    We intentionally avoid the separate
+    /pricing?tab=international Inertia request because
+    that endpoint was returning HTTP 500.
+
+    The client also retries temporary SSL, connection,
+    timeout, and 5xx errors.
     """
 
     def __init__(self):
         self.cookie_jar = CookieJar()
+
         self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(self.cookie_jar)
+            urllib.request.HTTPCookieProcessor(
+                self.cookie_jar
+            )
         )
+
         self.inertia_version = None
 
     def _request(self, url, headers=None):
-        request = urllib.request.Request(
-            url,
-            headers=headers or {},
-            method="GET",
+        """
+        Make an HTTP GET request with retries.
+
+        Retries:
+            - SSL errors
+            - connection errors
+            - timeouts
+            - HTTP 500/502/503/504
+        """
+
+        last_error = None
+
+        for attempt in range(
+            1,
+            MAX_REQUEST_ATTEMPTS + 1,
+        ):
+            request = urllib.request.Request(
+                url,
+                headers=headers or {},
+                method="GET",
+            )
+
+            try:
+                print(
+                    f"HTTP request attempt "
+                    f"{attempt}/{MAX_REQUEST_ATTEMPTS}: "
+                    f"{url}"
+                )
+
+                with self.opener.open(
+                    request,
+                    timeout=REQUEST_TIMEOUT,
+                ) as response:
+
+                    body = response.read()
+
+                    content_type = response.headers.get(
+                        "Content-Type",
+                        "",
+                    )
+
+                    return (
+                        response.status,
+                        content_type,
+                        body,
+                        dict(response.headers),
+                    )
+
+            except urllib.error.HTTPError as e:
+                body = e.read()
+
+                print(
+                    f"HTTP error {e.code} for {url}"
+                )
+
+                print(
+                    f"Reason: {e.reason}"
+                )
+
+                print(
+                    f"Response body length: "
+                    f"{len(body)} bytes"
+                )
+
+                if body:
+                    print(
+                        "Response body:"
+                    )
+
+                    print(
+                        body[:2000].decode(
+                            "utf-8",
+                            errors="replace",
+                        )
+                    )
+
+                print(
+                    "Response headers:"
+                )
+
+                for key, value in e.headers.items():
+                    print(
+                        f"  {key}: {value}"
+                    )
+
+                # Retry temporary server errors.
+                if (
+                    e.code
+                    in (
+                        500,
+                        502,
+                        503,
+                        504,
+                    )
+                    and attempt
+                    < MAX_REQUEST_ATTEMPTS
+                ):
+                    delay = RETRY_DELAYS[
+                        min(
+                            attempt - 1,
+                            len(RETRY_DELAYS) - 1,
+                        )
+                    ]
+
+                    print(
+                        f"Temporary HTTP "
+                        f"{e.code}. "
+                        f"Retrying in "
+                        f"{delay} seconds..."
+                    )
+
+                    time.sleep(delay)
+
+                    continue
+
+                raise
+
+            except (
+                urllib.error.URLError,
+                TimeoutError,
+                ConnectionError,
+            ) as e:
+
+                last_error = e
+
+                print(
+                    f"Connection/SSL error "
+                    f"on attempt "
+                    f"{attempt}/"
+                    f"{MAX_REQUEST_ATTEMPTS}:"
+                )
+
+                print(
+                    repr(e)
+                )
+
+                if attempt < MAX_REQUEST_ATTEMPTS:
+                    delay = RETRY_DELAYS[
+                        min(
+                            attempt - 1,
+                            len(RETRY_DELAYS) - 1,
+                        )
+                    ]
+
+                    print(
+                        f"Retrying in "
+                        f"{delay} seconds..."
+                    )
+
+                    time.sleep(delay)
+
+                    continue
+
+                raise
+
+            except Exception as e:
+                print(
+                    f"Unexpected request error "
+                    f"on attempt "
+                    f"{attempt}/"
+                    f"{MAX_REQUEST_ATTEMPTS}:"
+                )
+
+                print(
+                    repr(e)
+                )
+
+                raise
+
+        if last_error is not None:
+            raise last_error
+
+        raise RuntimeError(
+            f"Request failed: {url}"
         )
 
-        try:
-            with self.opener.open(
-                request,
-                timeout=REQUEST_TIMEOUT,
-            ) as response:
-                body = response.read()
+    def _browser_headers(
+        self,
+        referer=None,
+    ):
+        """
+        Headers for a normal browser-style request.
+        """
 
-                content_type = response.headers.get(
-                    "Content-Type",
-                    "",
-                )
-
-                return (
-                    response.status,
-                    content_type,
-                    body,
-                    dict(response.headers),
-                )
-
-        except urllib.error.HTTPError as e:
-            body = e.read()
-
-            print(f"HTTP error {e.code} for {url}")
-            print(f"Reason: {e.reason}")
-            print(f"Response body length: {len(body)} bytes")
-
-            if body:
-                print("Response body:")
-                print(
-                    body[:2000].decode(
-                        "utf-8",
-                        errors="replace",
-                    )
-                )
-            else:
-                print("Response body is empty.")
-
-            print("Response headers:")
-            for key, value in e.headers.items():
-                print(f"  {key}: {value}")
-
-            raise
-
-    def _browser_headers(self, referer=None):
         headers = {
             "User-Agent": USER_AGENT,
             "Accept": (
@@ -104,9 +246,12 @@ class MyanmarPostClient:
                 "application/json;q=0.9, "
                 "*/*;q=0.8"
             ),
-            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Language": (
+                "en-US,en;q=0.9"
+            ),
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
+            "Connection": "keep-alive",
         }
 
         if referer:
@@ -114,11 +259,15 @@ class MyanmarPostClient:
 
         return headers
 
-    def _extract_inertia_version(self, body):
+    def _extract_inertia_version(
+        self,
+        body,
+    ):
         """
-        Extract the current Inertia version from the initial
-        /pricing HTML.
+        Extract the current Inertia version
+        from the /pricing HTML.
         """
+
         text = body.decode(
             "utf-8",
             errors="replace",
@@ -127,17 +276,33 @@ class MyanmarPostClient:
         match = re.search(
             r'data-page\s*=\s*(["\'])(.*?)\1',
             text,
-            flags=re.IGNORECASE | re.DOTALL,
+            flags=(
+                re.IGNORECASE
+                | re.DOTALL
+            ),
         )
 
         if match:
-            raw_page = html.unescape(match.group(2))
+            raw_page = html.unescape(
+                match.group(2)
+            )
 
             try:
-                page_data = json.loads(raw_page)
-                version = page_data.get("version")
+                page_data = json.loads(
+                    raw_page
+                )
 
-                if isinstance(version, str) and version.strip():
+                version = page_data.get(
+                    "version"
+                )
+
+                if (
+                    isinstance(
+                        version,
+                        str,
+                    )
+                    and version.strip()
+                ):
                     return version.strip()
 
             except json.JSONDecodeError:
@@ -150,9 +315,14 @@ class MyanmarPostClient:
             )
 
             if version_match:
-                return version_match.group(1).strip()
+                return (
+                    version_match.group(1)
+                    .strip()
+                )
 
-        decoded_text = html.unescape(text)
+        decoded_text = html.unescape(
+            text
+        )
 
         version_match = re.search(
             r'"version"\s*:\s*"([^"]+)"',
@@ -161,15 +331,22 @@ class MyanmarPostClient:
         )
 
         if version_match:
-            return version_match.group(1).strip()
+            return (
+                version_match.group(1)
+                .strip()
+            )
 
         return None
 
-    def _extract_inertia_page(self, body):
+    def _extract_inertia_page(
+        self,
+        body,
+    ):
         """
-        Extract and decode the Inertia data-page JSON from
-        the normal /pricing HTML page.
+        Extract and decode the Inertia
+        data-page JSON.
         """
+
         text = body.decode(
             "utf-8",
             errors="replace",
@@ -178,54 +355,79 @@ class MyanmarPostClient:
         match = re.search(
             r'data-page\s*=\s*(["\'])(.*?)\1',
             text,
-            flags=re.IGNORECASE | re.DOTALL,
+            flags=(
+                re.IGNORECASE
+                | re.DOTALL
+            ),
         )
 
         if not match:
             return None
 
-        raw_page = html.unescape(match.group(2))
+        raw_page = html.unescape(
+            match.group(2)
+        )
 
         try:
-            return json.loads(raw_page)
+            return json.loads(
+                raw_page
+            )
+
         except json.JSONDecodeError:
             return None
 
     def refresh_inertia_version(self):
         """
-        Load the normal pricing page and discover the current
-        Inertia version.
+        Load /pricing and discover the
+        current Inertia version.
         """
-        print("Loading Myanmar Post pricing page...")
+
+        print(
+            "Loading Myanmar Post "
+            "pricing page..."
+        )
 
         url = f"{BASE_URL}/pricing"
 
-        status, content_type, body, response_headers = self._request(
+        (
+            status,
+            content_type,
+            body,
+            response_headers,
+        ) = self._request(
             url,
             self._browser_headers(),
         )
 
         print(
             f"Pricing page: HTTP {status}, "
-            f"{content_type}, {len(body)} bytes"
+            f"{content_type}, "
+            f"{len(body)} bytes"
         )
 
-        version = self._extract_inertia_version(body)
+        version = (
+            self._extract_inertia_version(
+                body
+            )
+        )
 
         if not version:
             print(
-                "Could not find the current Inertia version in "
-                "the /pricing HTML."
+                "Could not find the current "
+                "Inertia version."
             )
+
             raise RuntimeError(
-                "Could not determine Myanmar Post's current "
+                "Could not determine "
+                "Myanmar Post's current "
                 "Inertia version."
             )
 
         self.inertia_version = version
 
         print(
-            f"Detected current Inertia version: "
+            "Detected current Inertia "
+            f"version: "
             f"{self.inertia_version}"
         )
 
@@ -233,60 +435,106 @@ class MyanmarPostClient:
 
     def get_pricing_data(self):
         """
-        Load the normal /pricing page and extract its Inertia
-        data-page payload.
+        Load the normal /pricing page.
 
-        This intentionally does NOT request:
+        We intentionally do NOT make the
+        /pricing?tab=international request.
 
-            /pricing?tab=international
-
-        because that request currently returns HTTP 500.
+        The normal page already contains
+        an Inertia data-page payload.
         """
-        print("Loading Myanmar Post pricing page...")
+
+        print(
+            "Loading Myanmar Post "
+            "pricing page..."
+        )
 
         url = f"{BASE_URL}/pricing"
 
-        status, content_type, body, response_headers = self._request(
+        (
+            status,
+            content_type,
+            body,
+            response_headers,
+        ) = self._request(
             url,
             self._browser_headers(),
         )
 
         print(
             f"Pricing page: HTTP {status}, "
-            f"{content_type}, {len(body)} bytes"
+            f"{content_type}, "
+            f"{len(body)} bytes"
         )
 
-        page_data = self._extract_inertia_page(body)
+        # Discover the version for diagnostics.
+        version = (
+            self._extract_inertia_version(
+                body
+            )
+        )
+
+        if version:
+            self.inertia_version = version
+
+            print(
+                "Detected current Inertia "
+                f"version: "
+                f"{version}"
+            )
+
+        page_data = (
+            self._extract_inertia_page(
+                body
+            )
+        )
 
         if page_data is None:
             raise RuntimeError(
-                "Could not find or decode the Inertia "
-                "data-page payload in /pricing HTML."
+                "Could not find or decode "
+                "the Inertia data-page "
+                "payload in /pricing HTML."
             )
 
-        print("Successfully decoded Inertia page data.")
+        print(
+            "Successfully decoded "
+            "Inertia page data."
+        )
 
-        if isinstance(page_data, dict):
+        if isinstance(
+            page_data,
+            dict,
+        ):
             print(
                 "Inertia page keys:",
-                list(page_data.keys()),
+                list(
+                    page_data.keys()
+                ),
             )
 
-            props = page_data.get("props")
+            props = page_data.get(
+                "props"
+            )
 
-            if isinstance(props, dict):
+            if isinstance(
+                props,
+                dict,
+            ):
                 print(
                     "Inertia props keys:",
-                    list(props.keys()),
+                    list(
+                        props.keys()
+                    ),
                 )
 
-        # Save the decoded page temporarily for diagnostics.
+        # Save diagnostic data.
         try:
             with open(
                 "myanmarpost_inertia_debug.json",
                 "w",
                 encoding="utf-8",
             ) as debug_file:
+
                 json.dump(
                     page_data,
                     debug_file,
@@ -301,22 +549,27 @@ class MyanmarPostClient:
 
         except Exception as e:
             print(
-                f"Could not write diagnostic JSON: {e}"
+                "Could not write diagnostic "
+                f"JSON: {e}"
             )
 
         return page_data
 
-    def get_duration(self, country_code):
+    def get_duration(
+        self,
+        country_code,
+    ):
         """
         Get delivery duration information.
 
         Example:
             /deliver-duration/AU
 
-        The response contains separate services:
+        Response:
             data.fp
             data.ems
         """
+
         url = (
             f"{BASE_URL}/deliver-duration/"
             f"{country_code}"
@@ -328,12 +581,23 @@ class MyanmarPostClient:
                 "application/json, "
                 "text/plain, */*"
             ),
-            "Accept-Language": "en-US,en;q=0.9",
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": f"{BASE_URL}/pricing",
+            "Accept-Language": (
+                "en-US,en;q=0.9"
+            ),
+            "X-Requested-With": (
+                "XMLHttpRequest"
+            ),
+            "Referer": (
+                f"{BASE_URL}/pricing"
+            ),
         }
 
-        status, content_type, body, response_headers = self._request(
+        (
+            status,
+            content_type,
+            body,
+            response_headers,
+        ) = self._request(
             url,
             headers,
         )
@@ -351,7 +615,9 @@ class MyanmarPostClient:
         )
 
         try:
-            return json.loads(text)
+            return json.loads(
+                text
+            )
 
         except json.JSONDecodeError as e:
             print(
@@ -359,11 +625,13 @@ class MyanmarPostClient:
                 f"for {country_code}:"
             )
 
-            print(text[:1000])
+            print(
+                text[:1000]
+            )
 
             raise RuntimeError(
-                f"Invalid duration JSON for "
-                f"{country_code}: {e}"
+                "Invalid duration JSON "
+                f"for {country_code}: {e}"
             ) from e
 
 
@@ -373,16 +641,26 @@ class MyanmarPostClient:
 
 def find_country_list(obj):
     """
-    Recursively find the list containing country records.
+    Recursively find the list containing
+    country records.
 
     Country records contain:
         alpha_2_code
     """
-    if isinstance(obj, list):
+
+    if isinstance(
+        obj,
+        list,
+    ):
+
         if obj and all(
-            isinstance(item, dict)
+            isinstance(
+                item,
+                dict,
+            )
             for item in obj
         ):
+
             if any(
                 "alpha_2_code" in item
                 for item in obj
@@ -390,14 +668,22 @@ def find_country_list(obj):
                 return obj
 
         for item in obj:
-            result = find_country_list(item)
+            result = find_country_list(
+                item
+            )
 
             if result:
                 return result
 
-    elif isinstance(obj, dict):
+    elif isinstance(
+        obj,
+        dict,
+    ):
+
         for value in obj.values():
-            result = find_country_list(value)
+            result = find_country_list(
+                value
+            )
 
             if result:
                 return result
@@ -409,18 +695,19 @@ def find_country_list(obj):
 # ORDINARY LETTER PRICE
 # ---------------------------------------------------------
 
-def find_20g_letter_price(letter_rates):
+def find_20g_letter_price(
+    letter_rates,
+):
     """
-    Find the ordinary-letter price for
-    20 g or less.
+    Find the ordinary-letter price
+    for 20 g or less.
 
-    Myanmar Post represents weight in kg.
+    Myanmar Post represents weight
+    in kg.
 
         20 g = 0.02 kg
-
-    If several rates are <= 20 g,
-    use the highest available bracket.
     """
+
     if not isinstance(
         letter_rates,
         list,
@@ -430,6 +717,7 @@ def find_20g_letter_price(letter_rates):
     eligible = []
 
     for item in letter_rates:
+
         if not isinstance(
             item,
             dict,
@@ -452,9 +740,15 @@ def find_20g_letter_price(letter_rates):
         ):
             continue
 
-        if weight <= MAX_LETTER_WEIGHT_KG:
+        if (
+            weight
+            <= MAX_LETTER_WEIGHT_KG
+        ):
             eligible.append(
-                (weight, amount)
+                (
+                    weight,
+                    amount,
+                )
             )
 
     if not eligible:
@@ -471,17 +765,20 @@ def find_20g_letter_price(letter_rates):
 # EMS PRICE
 # ---------------------------------------------------------
 
-def find_ems_price(ems_rates):
+def find_ems_price(
+    ems_rates,
+):
     """
-    Find the EMS price for an item weighing
-    20 g or less.
+    Find the EMS price for an item
+    weighing 20 g or less.
 
-    EMS pricing normally starts at a larger
-    weight bracket, for example 0.5 kg.
+    EMS normally starts at a larger
+    weight bracket, such as 0.5 kg.
 
-    Therefore, for a 20 g item, use the
-    smallest available EMS weight bracket.
+    Therefore, use the smallest EMS
+    bracket that covers 20 g.
     """
+
     if not isinstance(
         ems_rates,
         list,
@@ -491,6 +788,7 @@ def find_ems_price(ems_rates):
     eligible = []
 
     for item in ems_rates:
+
         if not isinstance(
             item,
             dict,
@@ -513,10 +811,15 @@ def find_ems_price(ems_rates):
         ):
             continue
 
-        # EMS bracket must cover 20 g.
-        if weight >= MAX_LETTER_WEIGHT_KG:
+        if (
+            weight
+            >= MAX_LETTER_WEIGHT_KG
+        ):
             eligible.append(
-                (weight, amount)
+                (
+                    weight,
+                    amount,
+                )
             )
 
     if not eligible:
@@ -533,14 +836,17 @@ def find_ems_price(ems_rates):
 # COUNTRY PRICING
 # ---------------------------------------------------------
 
-def find_country_letter_price(country):
+def find_country_letter_price(
+    country,
+):
     """
-    Get the ordinary-letter price from:
+    Get ordinary-letter pricing from:
 
         country
             -> fp
                 -> letter
     """
+
     fp = country.get(
         "fp",
         {},
@@ -562,13 +868,16 @@ def find_country_letter_price(country):
     )
 
 
-def find_country_ems_price(country):
+def find_country_ems_price(
+    country,
+):
     """
-    Get the EMS price from:
+    Get EMS pricing from:
 
         country
             -> ems
     """
+
     ems = country.get(
         "ems",
         [],
@@ -588,13 +897,17 @@ def get_service_information(
     country_code,
 ):
     """
-    Get FP and EMS availability separately.
+    Get FP and EMS availability
+    separately.
 
-    A service is considered available only when
-    its days_en contains actual text.
+    A service is available only when
+    days_en contains actual text.
     """
-    duration_data = client.get_duration(
-        country_code
+
+    duration_data = (
+        client.get_duration(
+            country_code
+        )
     )
 
     data = duration_data.get(
@@ -659,13 +972,17 @@ def get_service_information(
     )
 
     return {
-        "fp_available": fp_available,
+        "fp_available": (
+            fp_available
+        ),
         "fp_duration": (
             fp_duration
             if fp_available
             else None
         ),
-        "ems_available": ems_available,
+        "ems_available": (
+            ems_available
+        ),
         "ems_duration": (
             ems_duration
             if ems_available
@@ -694,8 +1011,8 @@ def main():
 
     if not countries:
         raise RuntimeError(
-            "Could not find the country list "
-            "in the pricing response."
+            "Could not find the country "
+            "list in the pricing response."
         )
 
     print(
@@ -710,7 +1027,8 @@ def main():
     )
 
     output.append(
-        "Ordinary letter maximum weight: 20 g"
+        "Ordinary letter maximum "
+        "weight: 20 g"
     )
 
     output.append("")
@@ -740,6 +1058,7 @@ def main():
     ems_available_count = 0
 
     for country in countries_sorted:
+
         if not isinstance(
             country,
             dict,
@@ -766,10 +1085,16 @@ def main():
             f"({country_code})..."
         )
 
+        # -------------------------------------------------
+        # Get service availability.
+        # -------------------------------------------------
+
         try:
-            service = get_service_information(
-                client,
-                country_code,
+            service = (
+                get_service_information(
+                    client,
+                    country_code,
+                )
             )
 
         except Exception as e:
@@ -801,13 +1126,25 @@ def main():
             "ems_duration"
         ]
 
-        fp_price = find_country_letter_price(
-            country
+        # -------------------------------------------------
+        # Get prices.
+        # -------------------------------------------------
+
+        fp_price = (
+            find_country_letter_price(
+                country
+            )
         )
 
-        ems_price = find_country_ems_price(
-            country
+        ems_price = (
+            find_country_ems_price(
+                country
+            )
         )
+
+        # -------------------------------------------------
+        # Country name.
+        # -------------------------------------------------
 
         output.append(
             country_name
@@ -822,6 +1159,7 @@ def main():
         # -------------------------------------------------
 
         if fp_available:
+
             fp_available_count += 1
 
             if fp_price is not None:
@@ -844,6 +1182,7 @@ def main():
             )
 
         else:
+
             output.append(
                 "Ordinary letter "
                 "(20 g or less): "
@@ -855,6 +1194,7 @@ def main():
         # -------------------------------------------------
 
         if ems_available:
+
             ems_available_count += 1
 
             if ems_price is not None:
@@ -889,18 +1229,24 @@ def main():
         "w",
         encoding="utf-8",
     ) as file:
-        file.write(result)
+
+        file.write(
+            result
+        )
 
     # -----------------------------------------------------
     # DISPLAY RESULT
     # -----------------------------------------------------
 
     print("")
+
     print(
         "========================================"
     )
 
-    print(result)
+    print(
+        result
+    )
 
     print(
         "========================================"
@@ -917,7 +1263,8 @@ def main():
     )
 
     print(
-        "Output file: myanmarpost_prices.txt"
+        "Output file: "
+        "myanmarpost_prices.txt"
     )
 
 
