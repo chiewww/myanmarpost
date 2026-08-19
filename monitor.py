@@ -32,11 +32,10 @@ class MyanmarPostClient:
     """
     Small HTTP client for Myanmar Post.
 
-    The pricing page uses Inertia.  The old script hard-coded an
-    X-Inertia-Version value, which can become invalid after the website
-    deploys a new frontend.  This client first loads /pricing, discovers
-    the current Inertia version, and then uses that version for the
-    international pricing request.
+    The normal /pricing page is loaded first. The page contains
+    an Inertia data-page payload. We use that payload instead of
+    making the separate /pricing?tab=international request that
+    was returning HTTP 500.
     """
 
     def __init__(self):
@@ -59,6 +58,7 @@ class MyanmarPostClient:
                 timeout=REQUEST_TIMEOUT,
             ) as response:
                 body = response.read()
+
                 content_type = response.headers.get(
                     "Content-Type",
                     "",
@@ -116,18 +116,14 @@ class MyanmarPostClient:
 
     def _extract_inertia_version(self, body):
         """
-        Extract the current Inertia version from the initial /pricing HTML.
-
-        Inertia normally places its page data in a data-page attribute.
-        This function also has a fallback regex in case the exact HTML
-        structure changes slightly.
+        Extract the current Inertia version from the initial
+        /pricing HTML.
         """
         text = body.decode(
             "utf-8",
             errors="replace",
         )
 
-        # First try the normal Inertia data-page attribute.
         match = re.search(
             r'data-page\s*=\s*(["\'])(.*?)\1',
             text,
@@ -147,8 +143,6 @@ class MyanmarPostClient:
             except json.JSONDecodeError:
                 pass
 
-            # If the attribute was valid HTML but the page JSON changed
-            # slightly, search the decoded attribute for "version".
             version_match = re.search(
                 r'"version"\s*:\s*"([^"]+)"',
                 raw_page,
@@ -158,7 +152,6 @@ class MyanmarPostClient:
             if version_match:
                 return version_match.group(1).strip()
 
-        # Fallback: search the complete HTML.
         decoded_text = html.unescape(text)
 
         version_match = re.search(
@@ -172,12 +165,39 @@ class MyanmarPostClient:
 
         return None
 
+    def _extract_inertia_page(self, body):
+        """
+        Extract and decode the Inertia data-page JSON from
+        the normal /pricing HTML page.
+        """
+        text = body.decode(
+            "utf-8",
+            errors="replace",
+        )
+
+        match = re.search(
+            r'data-page\s*=\s*(["\'])(.*?)\1',
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+
+        if not match:
+            return None
+
+        raw_page = html.unescape(match.group(2))
+
+        try:
+            return json.loads(raw_page)
+        except json.JSONDecodeError:
+            return None
+
     def refresh_inertia_version(self):
         """
-        Load the normal pricing page and discover the current Inertia
-        version.  This also establishes cookies/session state.
+        Load the normal pricing page and discover the current
+        Inertia version.
         """
         print("Loading Myanmar Post pricing page...")
+
         url = f"{BASE_URL}/pricing"
 
         status, content_type, body, response_headers = self._request(
@@ -197,19 +217,13 @@ class MyanmarPostClient:
                 "Could not find the current Inertia version in "
                 "the /pricing HTML."
             )
-            print("First 2000 characters of the page:")
-            print(
-                body[:2000].decode(
-                    "utf-8",
-                    errors="replace",
-                )
-            )
             raise RuntimeError(
                 "Could not determine Myanmar Post's current "
                 "Inertia version."
             )
 
         self.inertia_version = version
+
         print(
             f"Detected current Inertia version: "
             f"{self.inertia_version}"
@@ -217,73 +231,80 @@ class MyanmarPostClient:
 
         return version
 
- def get_pricing_data(self):
-    """
-    Load the normal pricing page and extract its Inertia
-    data-page payload.
+    def get_pricing_data(self):
+        """
+        Load the normal /pricing page and extract its Inertia
+        data-page payload.
 
-    This avoids the /pricing?tab=international Inertia
-    request, which currently returns HTTP 500.
-    """
-    print("Loading Myanmar Post pricing page...")
+        This intentionally does NOT request:
 
-    url = f"{BASE_URL}/pricing"
+            /pricing?tab=international
 
-    status, content_type, body, response_headers = self._request(
-        url,
-        self._browser_headers(),
-    )
+        because that request currently returns HTTP 500.
+        """
+        print("Loading Myanmar Post pricing page...")
 
-    print(
-        f"Pricing page: HTTP {status}, "
-        f"{content_type}, {len(body)} bytes"
-    )
+        url = f"{BASE_URL}/pricing"
 
-    text = body.decode(
-        "utf-8",
-        errors="replace",
-    )
-
-    # Find the Inertia data-page attribute.
-    match = re.search(
-        r'data-page\s*=\s*(["\'])(.*?)\1',
-        text,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-
-    if not match:
-        raise RuntimeError(
-            "Could not find Inertia data-page in /pricing HTML."
+        status, content_type, body, response_headers = self._request(
+            url,
+            self._browser_headers(),
         )
 
-    raw_page = html.unescape(match.group(2))
-
-    try:
-        page_data = json.loads(raw_page)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(
-            f"Could not decode Inertia page data: {e}"
-        ) from e
-
-    print("Successfully decoded Inertia page data.")
-
-    # Show the top-level structure so we can verify
-    # where Myanmar Post put the pricing data.
-    if isinstance(page_data, dict):
         print(
-            "Inertia page keys:",
-            list(page_data.keys())
+            f"Pricing page: HTTP {status}, "
+            f"{content_type}, {len(body)} bytes"
         )
 
-        props = page_data.get("props")
+        page_data = self._extract_inertia_page(body)
 
-        if isinstance(props, dict):
-            print(
-                "Inertia props keys:",
-                list(props.keys())
+        if page_data is None:
+            raise RuntimeError(
+                "Could not find or decode the Inertia "
+                "data-page payload in /pricing HTML."
             )
 
-    return page_data
+        print("Successfully decoded Inertia page data.")
+
+        if isinstance(page_data, dict):
+            print(
+                "Inertia page keys:",
+                list(page_data.keys()),
+            )
+
+            props = page_data.get("props")
+
+            if isinstance(props, dict):
+                print(
+                    "Inertia props keys:",
+                    list(props.keys()),
+                )
+
+        # Save the decoded page temporarily for diagnostics.
+        try:
+            with open(
+                "myanmarpost_inertia_debug.json",
+                "w",
+                encoding="utf-8",
+            ) as debug_file:
+                json.dump(
+                    page_data,
+                    debug_file,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            print(
+                "Saved diagnostic data to "
+                "myanmarpost_inertia_debug.json"
+            )
+
+        except Exception as e:
+            print(
+                f"Could not write diagnostic JSON: {e}"
+            )
+
+        return page_data
 
     def get_duration(self, country_code):
         """
@@ -501,8 +522,6 @@ def find_ems_price(ems_rates):
     if not eligible:
         return None
 
-    # Use the smallest EMS bracket that
-    # covers a 20 g item.
     eligible.sort(
         key=lambda x: x[0]
     )
@@ -521,8 +540,6 @@ def find_country_letter_price(country):
         country
             -> fp
                 -> letter
-
-    EMS is deliberately NOT used here.
     """
     fp = country.get(
         "fp",
@@ -551,8 +568,6 @@ def find_country_ems_price(country):
 
         country
             -> ems
-
-    This is completely separate from FP.
     """
     ems = country.get(
         "ems",
@@ -577,16 +592,6 @@ def get_service_information(
 
     A service is considered available only when
     its days_en contains actual text.
-
-    Example available:
-        "between 3 and 10 days"
-
-    Example unavailable:
-        null
-
-    This prevents EMS information from being
-    incorrectly used as ordinary-letter
-    information.
     """
     duration_data = client.get_duration(
         country_code
@@ -633,8 +638,6 @@ def get_service_information(
         "days_en"
     )
 
-    # FP is available only when the API
-    # actually provides a duration.
     fp_available = (
         isinstance(
             fp_duration,
@@ -645,8 +648,6 @@ def get_service_information(
         )
     )
 
-    # EMS is available only when the API
-    # actually provides a duration.
     ems_available = (
         isinstance(
             ems_duration,
@@ -725,7 +726,6 @@ def main():
 
     output.append("")
 
-    # Sort countries alphabetically.
     countries_sorted = sorted(
         countries,
         key=lambda country: str(
@@ -766,10 +766,6 @@ def main():
             f"({country_code})..."
         )
 
-        # -------------------------------------------------
-        # Get service availability first.
-        # -------------------------------------------------
-
         try:
             service = get_service_information(
                 client,
@@ -805,10 +801,6 @@ def main():
             "ems_duration"
         ]
 
-        # -------------------------------------------------
-        # Get prices.
-        # -------------------------------------------------
-
         fp_price = find_country_letter_price(
             country
         )
@@ -816,10 +808,6 @@ def main():
         ems_price = find_country_ems_price(
             country
         )
-
-        # -------------------------------------------------
-        # Output country name.
-        # -------------------------------------------------
 
         output.append(
             country_name
@@ -856,9 +844,6 @@ def main():
             )
 
         else:
-            # IMPORTANT:
-            # Do NOT show the FP price when
-            # the service is suspended.
             output.append(
                 "Ordinary letter "
                 "(20 g or less): "
