@@ -1,7 +1,7 @@
 Myanmar Post International Ordinary Letter / EMS Prices
 Ordinary letter maximum weight: 20 g
 
-Generated: 2026-09-25 02:22:27 UTC
+Generated: 2026-09-26 02:26:45 UTC
 
 Australia
 Country code: AU
@@ -122,10 +122,7 @@ EMS delivery duration: between 5 and 7 days
 
 Japan
 Country code: JP
-Ordinary letter (20 g or less): 11,000 Kyats
-Delivery duration: between 3 and 7 days
-EMS (20 g or less): 185,000 Kyats
-EMS delivery duration: between 3 and 4 days
+Ordinary letter (20 g or less): service suspended
 
 Jordan
 Country code: JO
