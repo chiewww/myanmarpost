@@ -1,4 +1,4 @@
-name: Monitor Myanmar Post Prices
+name: Monitor Myanmar Post 
 
 on:
   schedule:
